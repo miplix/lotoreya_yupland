@@ -1,12 +1,13 @@
 import { NFTQuery, Prize, Winner, RaffleResult } from './types';
 
-interface WalletRange {
+export interface WalletRange {
   wallet: string;
+  tickets: number;
   start: number;
   end: number;
 }
 
-// Deduplicates by token_id to avoid double-counting overlapping queries
+// Deduplicates by token_id, returns sorted map by ticket count descending
 export function aggregateWalletTickets(queries: NFTQuery[]): Map<string, number> {
   const seen = new Set<string>();
   const map = new Map<string, number>();
@@ -24,23 +25,24 @@ export function getTotalTickets(queries: NFTQuery[]): number {
   return Array.from(aggregateWalletTickets(queries).values()).reduce((s, v) => s + v, 0);
 }
 
-function buildRanges(ticketMap: Map<string, number>): { ranges: WalletRange[]; total: number } {
-  const ranges: WalletRange[] = [];
+// Sorted by tickets descending — same order used for lottery draws and overview
+export function getWalletRanges(queries: NFTQuery[]): WalletRange[] {
+  const map = aggregateWalletTickets(queries);
+  const sorted = Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
   let cursor = 1;
-  for (const [wallet, tickets] of ticketMap) {
-    ranges.push({ wallet, start: cursor, end: cursor + tickets - 1 });
+  return sorted.map(([wallet, tickets]) => {
+    const start = cursor;
+    const end = cursor + tickets - 1;
     cursor += tickets;
-  }
-  return { ranges, total: cursor - 1 };
+    return { wallet, tickets, start, end };
+  });
 }
 
-// Picks `count` unique numbers from [1..max] not in `excluded`
 function pickUnique(count: number, max: number, excluded: Set<number>): number[] {
   const available = max - excluded.size;
   const actual = Math.min(count, available);
   if (actual <= 0) return [];
 
-  // Pool shuffle for dense picks, rejection sampling for sparse
   if (actual > available * 0.5) {
     const pool: number[] = [];
     for (let i = 1; i <= max; i++) {
@@ -77,8 +79,8 @@ export function runLottery(
   prize: Prize,
   usedNumbers: number[],
 ): { result: RaffleResult; capped: boolean; newUsedNumbers: number[] } {
-  const ticketMap = aggregateWalletTickets(queries);
-  const { ranges, total } = buildRanges(ticketMap);
+  const ranges = getWalletRanges(queries);
+  const total = ranges.length ? ranges[ranges.length - 1].end : 0;
   const excluded = new Set(usedNumbers);
   const available = total - excluded.size;
 

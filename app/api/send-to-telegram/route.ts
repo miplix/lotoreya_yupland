@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const BOT_TOKEN = process.env.BOT_TOKEN ?? '';
 const CHAT_ID = process.env.CHAT_ID ?? '';
-// Comma-separated list of private user IDs who receive the CSV file
 const CSV_RECIPIENTS = (process.env.CSV_RECIPIENT_IDS ?? '')
   .split(',')
   .map(s => s.trim())
@@ -22,8 +21,8 @@ async function tgPost(method: string, body: FormData | Record<string, unknown>) 
 export async function POST(request: NextRequest) {
   const { text, csvString, filename } = (await request.json()) as {
     text: string;
-    csvString: string;
-    filename: string;
+    csvString?: string;
+    filename?: string;
   };
 
   if (!BOT_TOKEN) {
@@ -33,7 +32,7 @@ export async function POST(request: NextRequest) {
   const errors: string[] = [];
 
   // 1. Text message → group chat
-  if (CHAT_ID) {
+  if (CHAT_ID && text) {
     try {
       await tgPost('sendMessage', { chat_id: CHAT_ID, text });
     } catch (e) {
@@ -41,15 +40,17 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // 2. CSV document → each private recipient
-  for (const userId of CSV_RECIPIENTS) {
-    try {
-      const form = new FormData();
-      form.append('chat_id', userId);
-      form.append('document', new Blob([csvString], { type: 'text/csv' }), filename);
-      await tgPost('sendDocument', form);
-    } catch (e) {
-      errors.push(`CSV to ${userId}: ${e instanceof Error ? e.message : e}`);
+  // 2. CSV document → each private recipient (only if CSV provided)
+  if (csvString && filename) {
+    for (const userId of CSV_RECIPIENTS) {
+      try {
+        const form = new FormData();
+        form.append('chat_id', userId);
+        form.append('document', new Blob([csvString], { type: 'text/csv' }), filename);
+        await tgPost('sendDocument', form);
+      } catch (e) {
+        errors.push(`CSV to ${userId}: ${e instanceof Error ? e.message : e}`);
+      }
     }
   }
 
