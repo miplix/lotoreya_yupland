@@ -80,6 +80,10 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
         )}
       </div>
 
+      <p className="text-sm font-semibold text-yellow-400 tracking-wide">
+        Вводите полное название NFT — неполное название не найдёт кошельки
+      </p>
+
       {queries.map(query => (
         <div key={query.id} className="flex gap-2">
           <input
