@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { NFTQuery, NFTItem } from '@/lib/types';
 import { extractTicketCount } from '@/lib/nft-parser';
 import { getWalletRanges } from '@/lib/lottery';
@@ -28,12 +28,48 @@ async function sendOverview(queries: NFTQuery[]): Promise<void> {
 export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Map<string, string>>(new Map());
+  // IDs of queries that passed the silent 1-sec debounce check (≥1 NFT found)
+  const [validated, setValidated] = useState<Set<string>>(new Set());
+  const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  // Cleanup timers on unmount
+  useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
 
   const addQuery = () =>
     onChange([...queries, { id: crypto.randomUUID(), searchTitle: '', nfts: [] }]);
-  const removeQuery = (id: string) => onChange(queries.filter(q => q.id !== id));
-  const updateTitle = (id: string, title: string) =>
+
+  const removeQuery = (id: string) => {
+    const t = timers.current.get(id);
+    if (t) { clearTimeout(t); timers.current.delete(id); }
+    setValidated(prev => { const s = new Set(prev); s.delete(id); return s; });
+    onChange(queries.filter(q => q.id !== id));
+  };
+
+  const updateTitle = (id: string, title: string) => {
     onChange(queries.map(q => (q.id === id ? { ...q, searchTitle: title } : q)));
+
+    // Reset checkmark for this field
+    setValidated(prev => { const s = new Set(prev); s.delete(id); return s; });
+
+    // Clear existing debounce timer
+    const existing = timers.current.get(id);
+    if (existing) clearTimeout(existing);
+
+    if (!title.trim()) return;
+
+    // Schedule silent check after 1 s
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search-nft?title=${encodeURIComponent(title.trim())}`);
+        const data = await res.json();
+        if ((data.items ?? []).length > 0) {
+          setValidated(prev => new Set(prev).add(id));
+        }
+      } catch { /* silent */ }
+    }, 1000);
+
+    timers.current.set(id, timer);
+  };
 
   const searchAll = async () => {
     if (!queries.some(q => q.searchTitle.trim())) return;
@@ -85,22 +121,34 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
       </p>
 
       {queries.map(query => (
-        <div key={query.id} className="flex gap-2">
-          <input
-            className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-            placeholder="Название NFT для поиска"
-            value={query.searchTitle}
-            onChange={e => updateTitle(query.id, e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && searchAll()}
-          />
+        <div key={query.id} className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <input
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              placeholder="Название NFT для поиска"
+              value={query.searchTitle}
+              onChange={e => updateTitle(query.id, e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && searchAll()}
+            />
+          </div>
+
+          {/* Green checkmark — appears after debounce confirms ≥1 NFT found */}
+          <span
+            className="text-green-400 text-xl font-bold transition-opacity duration-300 select-none"
+            style={{ opacity: validated.has(query.id) ? 1 : 0, minWidth: '1.25rem' }}
+          >
+            ✓
+          </span>
+
           {queries.length > 1 && (
             <button
-              className="px-3 py-2 bg-gray-700 hover:bg-red-800 rounded-lg text-sm transition-colors"
+              className="px-3 py-2 bg-gray-700 hover:bg-red-800 rounded-lg text-sm transition-colors shrink-0"
               onClick={() => removeQuery(query.id)}
             >✕</button>
           )}
+
           {errors.get(query.id) && (
-            <span className="text-red-400 text-xs self-center">{errors.get(query.id)}</span>
+            <span className="text-red-400 text-xs shrink-0">{errors.get(query.id)}</span>
           )}
         </div>
       ))}
