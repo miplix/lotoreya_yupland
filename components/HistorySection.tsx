@@ -1,27 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { RaffleResult, Prize } from '@/lib/types';
-import { generateCSV, downloadCSV } from '@/lib/csv';
+import { RaffleResult } from '@/lib/types';
+import { generateCSV, downloadCSV, makeFilename, formatRaffleText } from '@/lib/csv';
 
 interface Props {
   history: RaffleResult[];
-}
-
-// "газировка 1 лвл" × 50 → "газировка_1_лвл_50.csv"
-function makeFilename(prizes: Prize[]): string {
-  const parts = prizes.map(p => `${p.name.trim().replace(/\s+/g, '_')}_${p.count}`);
-  return `${parts.join('_')}.csv`;
-}
-
-// Text for the group chat
-function formatText(result: RaffleResult): string {
-  const header = result.prizes.map(p => `${p.name} × ${p.count}`).join(' + ');
-  const lines = [header, ''];
-  for (const w of result.winners) {
-    lines.push(`${w.wallet} — ${w.prizeCount} шт     ${w.winningNumbers.join(', ')}`);
-  }
-  return lines.join('\n');
 }
 
 export default function HistorySection({ history }: Props) {
@@ -40,31 +24,13 @@ export default function HistorySection({ history }: Props) {
   const sendToTelegram = async (result: RaffleResult) => {
     setSending(prev => new Set(prev).add(result.id));
     try {
-      const res = await fetch('/api/send-to-telegram', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: formatText(result),
-          csvString: generateCSV(result),
-          filename: makeFilename(result.prizes),
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        const msg = err.errors ? err.errors.join('\n') : err.error ?? 'Unknown error';
-        throw new Error(msg);
-      }
+      await doSend(result);
       alert('Отправлено!');
     } catch (e) {
       alert(`Ошибка: ${e instanceof Error ? e.message : 'Unknown'}`);
     } finally {
       setSending(prev => { const s = new Set(prev); s.delete(result.id); return s; });
     }
-  };
-
-  const handleDownload = (result: RaffleResult) => {
-    downloadCSV(generateCSV(result), makeFilename(result.prizes));
   };
 
   return (
@@ -81,8 +47,8 @@ export default function HistorySection({ history }: Props) {
                 {new Date(result.timestamp).toLocaleString('ru-RU')}
               </span>
               <span className="ml-3 text-xs text-gray-400">
-                {result.winners.length} победит. · {result.totalTickets} билетов ·{' '}
-                {result.prizes.map(p => `${p.name} ×${p.count}`).join(', ')}
+                {result.prizes.map(p => `${p.name} ×${p.count}`).join(', ')} ·{' '}
+                {result.winners.length} победит. · {result.availableAtDraw ?? result.totalTickets} доступных билетов
               </span>
             </div>
             <div className="flex items-center gap-2 ml-3 shrink-0">
@@ -95,7 +61,7 @@ export default function HistorySection({ history }: Props) {
               </button>
               <button
                 className="px-2.5 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
-                onClick={e => { e.stopPropagation(); handleDownload(result); }}
+                onClick={e => { e.stopPropagation(); downloadCSV(generateCSV(result), makeFilename(result.prizes)); }}
               >
                 CSV
               </button>
@@ -123,4 +89,21 @@ export default function HistorySection({ history }: Props) {
       ))}
     </div>
   );
+}
+
+export async function doSend(result: RaffleResult): Promise<void> {
+  const res = await fetch('/api/send-to-telegram', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: formatRaffleText(result),
+      csvString: generateCSV(result),
+      filename: makeFilename(result.prizes),
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const msg = Array.isArray(err.errors) ? err.errors.join('\n') : (err.error ?? 'Unknown error');
+    throw new Error(msg);
+  }
 }

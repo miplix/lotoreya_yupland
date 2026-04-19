@@ -3,13 +3,20 @@
 import { useState, useEffect, useRef } from 'react';
 import NFTSection from '@/components/NFTSection';
 import PrizeSection from '@/components/PrizeSection';
-import HistorySection from '@/components/HistorySection';
+import HistorySection, { doSend } from '@/components/HistorySection';
 import { AppState } from '@/lib/types';
 import { loadState, saveState, resetState, exportState, importState } from '@/lib/storage';
 import { runLottery, getTotalTickets } from '@/lib/lottery';
 
+interface PrizeForm {
+  name: string;
+  count: number;
+}
+
 export default function Home() {
-  const [state, setState] = useState<AppState>({ queries: [], prizes: [], history: [] });
+  const [state, setState] = useState<AppState>({ queries: [], history: [], usedNumbers: [] });
+  const [prize, setPrize] = useState<PrizeForm>({ name: '', count: 1 });
+  const [sending, setSending] = useState(false);
   const [mounted, setMounted] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
@@ -23,29 +30,46 @@ export default function Home() {
   }, [state, mounted]);
 
   const totalTickets = getTotalTickets(state.queries);
+  const available = totalTickets - state.usedNumbers.length;
 
-  const handleLottery = () => {
-    const hasNFTs = state.queries.some(q => q.nfts.length > 0);
-    if (!hasNFTs) {
+  const handleLottery = async () => {
+    if (!state.queries.some(q => q.nfts.length > 0)) {
       alert('Сначала найдите NFT через поиск');
       return;
     }
-    const hasPrizes = state.prizes.some(p => p.count > 0);
-    if (!hasPrizes) {
-      alert('Добавьте хотя бы один приз');
+    if (!prize.name.trim()) {
+      alert('Введите название приза');
+      return;
+    }
+    if (available <= 0) {
+      alert('Все билеты уже разыграны. Нажмите «Сбросить всё» для новой сессии.');
       return;
     }
 
-    const { result, capped } = runLottery(state.queries, state.prizes);
+    const prizeObj = { id: crypto.randomUUID(), name: prize.name.trim(), count: prize.count };
+    const { result, capped, newUsedNumbers } = runLottery(state.queries, prizeObj, state.usedNumbers);
 
     if (capped) {
       const drawn = result.csvData.reduce((s, r) => s + r.count, 0);
-      alert(
-        `Призов больше, чем билетов. Разыграно: ${drawn} из ${state.prizes.reduce((s, p) => s + p.count, 0)}.`,
-      );
+      alert(`Призов больше доступных билетов. Разыграно: ${drawn} из ${prize.count}.`);
     }
 
-    setState(prev => ({ ...prev, history: [...prev.history, result] }));
+    const nextState = {
+      ...state,
+      history: [...state.history, result],
+      usedNumbers: newUsedNumbers,
+    };
+    setState(nextState);
+
+    // Auto-send to Telegram
+    setSending(true);
+    try {
+      await doSend(result);
+    } catch (e) {
+      alert(`Розыгрыш сохранён, но ошибка отправки в TG:\n${e instanceof Error ? e.message : e}`);
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleReset = () => {
@@ -57,8 +81,7 @@ export default function Home() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const imported = await importState(file);
-      setState(imported);
+      setState(await importState(file));
     } catch {
       alert('Ошибка импорта — неверный формат файла');
     }
@@ -84,9 +107,10 @@ export default function Home() {
           </div>
           <div className="bg-gray-800 rounded-xl p-5">
             <PrizeSection
-              prizes={state.prizes}
-              onChange={prizes => setState(prev => ({ ...prev, prizes }))}
+              prize={prize}
+              onChange={setPrize}
               totalTickets={totalTickets}
+              usedNumbers={state.usedNumbers.length}
             />
           </div>
         </div>
@@ -95,9 +119,9 @@ export default function Home() {
           <button
             className="px-6 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 rounded-lg font-medium transition-colors"
             onClick={handleLottery}
-            disabled={totalTickets === 0}
+            disabled={available <= 0 || sending}
           >
-            Провести розыгрыш
+            {sending ? 'Отправка в TG...' : 'Провести розыгрыш'}
           </button>
 
           <div className="flex gap-2 ml-auto">
@@ -113,13 +137,7 @@ export default function Home() {
             >
               Импорт JSON
             </button>
-            <input
-              ref={importRef}
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={handleImport}
-            />
+            <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
             <button
               className="px-4 py-2 bg-red-900 hover:bg-red-800 rounded-lg text-sm transition-colors"
               onClick={handleReset}

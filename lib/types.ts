@@ -29,11 +29,12 @@ export interface RaffleResult {
   prizes: Prize[];
   winners: Winner[];
   totalTickets: number;
+  availableAtDraw: number; // tickets available (total minus already used) at the time of this draw
   csvData: Array<{ wallet: string; count: number }>;
 }
 
 export interface AppState {
   queries: NFTQuery[];
-  prizes: Prize[];
   history: RaffleResult[];
+  usedNumbers: number[]; // winning numbers from all previous raffles in this session
 }

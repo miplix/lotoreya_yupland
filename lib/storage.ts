@@ -1,7 +1,7 @@
 import { AppState } from './types';
 
 const KEY = 'nft-lottery-state';
-const DEFAULT: AppState = { queries: [], prizes: [], history: [] };
+const DEFAULT: AppState = { queries: [], history: [], usedNumbers: [] };
 
 export function loadState(): AppState {
   if (typeof window === 'undefined') return DEFAULT;

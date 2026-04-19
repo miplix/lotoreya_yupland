@@ -6,7 +6,7 @@ interface WalletRange {
   end: number;
 }
 
-// Deduplicates by token_id to avoid double-counting if a query overlaps another
+// Deduplicates by token_id to avoid double-counting overlapping queries
 export function aggregateWalletTickets(queries: NFTQuery[]): Map<string, number> {
   const seen = new Set<string>();
   const map = new Map<string, number>();
@@ -34,19 +34,29 @@ function buildRanges(ticketMap: Map<string, number>): { ranges: WalletRange[]; t
   return { ranges, total: cursor - 1 };
 }
 
-function pickUnique(count: number, max: number): number[] {
-  // Fisher-Yates partial shuffle for large pick ratios, simple rejection sampling otherwise
-  if (count > max * 0.5) {
-    const pool = Array.from({ length: max }, (_, i) => i + 1);
-    for (let i = pool.length - 1; i >= pool.length - count; i--) {
+// Picks `count` unique numbers from [1..max] not in `excluded`
+function pickUnique(count: number, max: number, excluded: Set<number>): number[] {
+  const available = max - excluded.size;
+  const actual = Math.min(count, available);
+  if (actual <= 0) return [];
+
+  // Pool shuffle for dense picks, rejection sampling for sparse
+  if (actual > available * 0.5) {
+    const pool: number[] = [];
+    for (let i = 1; i <= max; i++) {
+      if (!excluded.has(i)) pool.push(i);
+    }
+    for (let i = pool.length - 1; i >= pool.length - actual; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [pool[i], pool[j]] = [pool[j], pool[i]];
     }
-    return pool.slice(pool.length - count).sort((a, b) => a - b);
+    return pool.slice(pool.length - actual).sort((a, b) => a - b);
   }
+
   const set = new Set<number>();
-  while (set.size < count) {
-    set.add(Math.floor(Math.random() * max) + 1);
+  while (set.size < actual) {
+    const n = Math.floor(Math.random() * max) + 1;
+    if (!excluded.has(n)) set.add(n);
   }
   return Array.from(set).sort((a, b) => a - b);
 }
@@ -64,16 +74,18 @@ function walletForNumber(num: number, ranges: WalletRange[]): string {
 
 export function runLottery(
   queries: NFTQuery[],
-  prizes: Prize[],
-): { result: RaffleResult; capped: boolean } {
+  prize: Prize,
+  usedNumbers: number[],
+): { result: RaffleResult; capped: boolean; newUsedNumbers: number[] } {
   const ticketMap = aggregateWalletTickets(queries);
   const { ranges, total } = buildRanges(ticketMap);
+  const excluded = new Set(usedNumbers);
+  const available = total - excluded.size;
 
-  const totalPrizes = prizes.reduce((s, p) => s + p.count, 0);
-  const capped = totalPrizes > total;
-  const drawCount = Math.min(totalPrizes, total);
+  const capped = prize.count > available;
+  const drawCount = Math.min(prize.count, available);
 
-  const drawn = pickUnique(drawCount, total);
+  const drawn = pickUnique(drawCount, total, excluded);
 
   const walletWins = new Map<string, number[]>();
   for (const num of drawn) {
@@ -93,11 +105,13 @@ export function runLottery(
     result: {
       id: crypto.randomUUID(),
       timestamp: Date.now(),
-      prizes,
+      prizes: [prize],
       winners,
       totalTickets: total,
+      availableAtDraw: available,
       csvData: winners.map(w => ({ wallet: w.wallet, count: w.prizeCount })),
     },
     capped,
+    newUsedNumbers: [...usedNumbers, ...drawn],
   };
 }
