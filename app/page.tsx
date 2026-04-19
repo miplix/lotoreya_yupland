@@ -111,20 +111,14 @@ export default function Home() {
               onChange={setPrize}
               totalTickets={totalTickets}
               usedNumbers={state.usedNumbers.length}
+              onRaffle={handleLottery}
+              sending={sending}
             />
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3 items-center">
-          <button
-            className="px-6 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 rounded-lg font-medium transition-colors"
-            onClick={handleLottery}
-            disabled={available <= 0 || sending}
-          >
-            {sending ? 'Отправка в TG...' : 'Провести розыгрыш'}
-          </button>
-
-          <div className="flex gap-2 ml-auto">
+        <div className="flex justify-end">
+          <div className="flex gap-2">
             <button
               className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
               onClick={() => exportState(state)}

@@ -10,11 +10,14 @@ interface Props {
   onChange: (prize: PrizeForm) => void;
   totalTickets: number;
   usedNumbers: number;
+  onRaffle: () => void;
+  sending: boolean;
 }
 
-export default function PrizeSection({ prize, onChange, totalTickets, usedNumbers }: Props) {
+export default function PrizeSection({ prize, onChange, totalTickets, usedNumbers, onRaffle, sending }: Props) {
   const available = totalTickets - usedNumbers;
   const over = prize.count > available && available > 0;
+  const canRaffle = available > 0 && !!prize.name.trim();
 
   return (
     <div className="space-y-4">
@@ -51,6 +54,14 @@ export default function PrizeSection({ prize, onChange, totalTickets, usedNumber
           )}
         </div>
       </div>
+
+      <button
+        className="w-full py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 rounded-lg font-medium text-sm transition-colors"
+        onClick={onRaffle}
+        disabled={!canRaffle || sending}
+      >
+        {sending ? 'Отправка в TG...' : 'Провести розыгрыш'}
+      </button>
     </div>
   );
 }
