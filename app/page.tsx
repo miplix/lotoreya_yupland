@@ -10,9 +10,64 @@ import { loadState, saveState, resetState, exportState, importState } from '@/li
 import { runLottery, getTotalTickets } from '@/lib/lottery';
 import { formatRaffleText } from '@/lib/csv';
 
-interface PrizeForm {
-  name: string;
-  count: number;
+interface PrizeForm { name: string; count: number; }
+
+// Reusable slide panel — collapses horizontally leaving a narrow strip with big arrow
+function SlidePanel({
+  children,
+  isOpen,
+  onOpen,
+  arrowDir,
+  label,
+}: {
+  children: React.ReactNode;
+  isOpen: boolean;
+  onOpen: () => void;
+  arrowDir: 'left' | 'right';
+  label: string;
+}) {
+  return (
+    <div
+      className="relative rounded-xl bg-gray-800 overflow-hidden flex-1"
+      style={{
+        maxWidth: isOpen ? '100%' : '4.5rem',
+        minWidth: '4.5rem',
+        transition: 'max-width 0.35s cubic-bezier(0.4,0,0.2,1)',
+      }}
+    >
+      {/* Content */}
+      <div
+        style={{
+          opacity: isOpen ? 1 : 0,
+          pointerEvents: isOpen ? 'auto' : 'none',
+          transition: 'opacity 0.2s',
+          minWidth: 280,
+        }}
+      >
+        {children}
+      </div>
+
+      {/* Collapsed strip — big round arrow button */}
+      <div
+        className="absolute inset-0 flex items-center justify-center"
+        style={{
+          opacity: isOpen ? 0 : 1,
+          pointerEvents: isOpen ? 'none' : 'auto',
+          transition: 'opacity 0.2s 0.1s',
+        }}
+      >
+        <button
+          className="w-16 h-16 rounded-full bg-blue-600 hover:bg-blue-500 shadow-2xl flex items-center justify-center transition-colors"
+          onClick={onOpen}
+          title={label}
+        >
+          <span className="text-white select-none" style={{ fontSize: '2.2rem', lineHeight: 1 }}>
+            {arrowDir === 'right' ? '›' : '‹'}
+          </span>
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function Home() {
@@ -24,64 +79,36 @@ export default function Home() {
   const [resultText, setResultText] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    setState(loadState());
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (mounted) saveState(state);
-  }, [state, mounted]);
+  useEffect(() => { setState(loadState()); setMounted(true); }, []);
+  useEffect(() => { if (mounted) saveState(state); }, [state, mounted]);
 
   const totalTickets = getTotalTickets(state.queries);
   const available = totalTickets - state.usedNumbers.length;
 
-  // After NFT search: auto-collapse NFT panel, open prizes
   const handleSearchDone = (updatedQueries: NFTQuery[]) => {
     setState(prev => ({ ...prev, queries: updatedQueries }));
     setActivePanel('prizes');
   };
 
   const handleLottery = async () => {
-    if (!state.queries.some(q => q.nfts.length > 0)) {
-      alert('Сначала найдите NFT');
-      return;
-    }
-    if (!prize.name.trim()) {
-      alert('Введите название приза');
-      return;
-    }
-    if (available <= 0) {
-      alert('Все билеты разыграны. Нажмите «Сбросить всё».');
-      return;
-    }
+    if (!state.queries.some(q => q.nfts.length > 0)) { alert('Сначала найдите NFT'); return; }
+    if (!prize.name.trim()) { alert('Введите название приза'); return; }
+    if (available <= 0) { alert('Все билеты разыграны. Нажмите «Сбросить всё».'); return; }
 
     const prizeObj = { id: crypto.randomUUID(), name: prize.name.trim(), count: prize.count };
     const { result, capped, newUsedNumbers } = runLottery(state.queries, prizeObj, state.usedNumbers);
 
     if (capped) {
-      const drawn = result.csvData.reduce((s, r) => s + r.count, 0);
-      alert(`Призов больше доступных. Разыграно: ${drawn} из ${prize.count}.`);
+      alert(`Призов больше доступных. Разыграно: ${result.csvData.reduce((s, r) => s + r.count, 0)} из ${prize.count}.`);
     }
 
-    setState(prev => ({
-      ...prev,
-      history: [...prev.history, result],
-      usedNumbers: newUsedNumbers,
-    }));
-
-    // Show result modal
+    setState(prev => ({ ...prev, history: [...prev.history, result], usedNumbers: newUsedNumbers }));
     setResultText(formatRaffleText(result));
 
-    // Auto-send to Telegram
     setSending(true);
-    try {
-      await doSend(result);
-    } catch (e) {
-      alert(`Розыгрыш сохранён, ошибка TG:\n${e instanceof Error ? e.message : e}`);
-    } finally {
-      setSending(false);
-    }
+    try { await doSend(result); }
+    catch (e) { alert(`Розыгрыш сохранён, ошибка TG:\n${e instanceof Error ? e.message : e}`); }
+    finally { setSending(false); }
   };
 
   const handleReset = () => {
@@ -92,8 +119,7 @@ export default function Home() {
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    try { setState(await importState(file)); }
-    catch { alert('Ошибка импорта'); }
+    try { setState(await importState(file)); } catch { alert('Ошибка импорта'); }
     e.target.value = '';
   };
 
@@ -107,56 +133,50 @@ export default function Home() {
           <span className="text-xs text-gray-500">Yupland · {new Date().getFullYear()}</span>
         </header>
 
-        {/* Collapsible panels */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <NFTSection
-            queries={state.queries}
-            onChange={queries => setState(prev => ({ ...prev, queries }))}
+        {/* Horizontal slide panels */}
+        <div className="flex gap-4" style={{ minHeight: '320px' }}>
+          <SlidePanel
             isOpen={activePanel === 'nft'}
-            onToggle={() => setActivePanel(activePanel === 'nft' ? 'prizes' : 'nft')}
-            onSearchDone={handleSearchDone}
-          />
-          <PrizeSection
-            prize={prize}
-            onChange={setPrize}
-            totalTickets={totalTickets}
-            usedNumbers={state.usedNumbers.length}
-            onRaffle={handleLottery}
-            sending={sending}
+            onOpen={() => setActivePanel('nft')}
+            arrowDir="right"
+            label="Открыть NFT / Билеты"
+          >
+            <NFTSection
+              queries={state.queries}
+              onChange={queries => setState(prev => ({ ...prev, queries }))}
+              onSearchDone={handleSearchDone}
+            />
+          </SlidePanel>
+
+          <SlidePanel
             isOpen={activePanel === 'prizes'}
-            onToggle={() => setActivePanel(activePanel === 'prizes' ? 'nft' : 'prizes')}
-          />
+            onOpen={() => setActivePanel('prizes')}
+            arrowDir="left"
+            label="Открыть Призы"
+          >
+            <PrizeSection
+              prize={prize}
+              onChange={setPrize}
+              totalTickets={totalTickets}
+              usedNumbers={state.usedNumbers.length}
+              onRaffle={handleLottery}
+              sending={sending}
+            />
+          </SlidePanel>
         </div>
 
         {/* Utility buttons */}
         <div className="flex justify-end gap-2">
-          <button
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
-            onClick={() => exportState(state)}
-          >
-            Экспорт
-          </button>
-          <button
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
-            onClick={() => importRef.current?.click()}
-          >
-            Импорт
-          </button>
+          <button className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors" onClick={() => exportState(state)}>Экспорт</button>
+          <button className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors" onClick={() => importRef.current?.click()}>Импорт</button>
           <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
-          <button
-            className="px-4 py-2 bg-red-900 hover:bg-red-800 rounded-lg text-sm transition-colors"
-            onClick={handleReset}
-          >
-            Сбросить всё
-          </button>
+          <button className="px-4 py-2 bg-red-900 hover:bg-red-800 rounded-lg text-sm transition-colors" onClick={handleReset}>Сбросить всё</button>
         </div>
 
         <HistorySection history={state.history} />
       </div>
 
-      {resultText && (
-        <ResultModal text={resultText} onClose={() => setResultText(null)} />
-      )}
+      {resultText && <ResultModal text={resultText} onClose={() => setResultText(null)} />}
     </main>
   );
 }
