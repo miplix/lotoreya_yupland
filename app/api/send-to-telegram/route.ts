@@ -18,6 +18,18 @@ async function tgPost(method: string, body: FormData | Record<string, unknown>) 
   if (!res.ok) throw new Error(await res.text());
 }
 
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 1500): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn(); }
+    catch (e) {
+      lastErr = e;
+      if (i < attempts - 1) await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 export async function POST(request: NextRequest) {
   const { text, csvString, filename } = (await request.json()) as {
     text: string;
@@ -40,14 +52,16 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // 2. CSV document → each private recipient (only if CSV provided)
+  // 2. CSV document → each private recipient (only if CSV provided), with retry
   if (csvString && filename) {
     for (const userId of CSV_RECIPIENTS) {
       try {
-        const form = new FormData();
-        form.append('chat_id', userId);
-        form.append('document', new Blob([csvString], { type: 'text/csv' }), filename);
-        await tgPost('sendDocument', form);
+        await withRetry(async () => {
+          const form = new FormData();
+          form.append('chat_id', userId);
+          form.append('document', new Blob([csvString], { type: 'text/csv' }), filename);
+          await tgPost('sendDocument', form);
+        });
       } catch (e) {
         errors.push(`CSV to ${userId}: ${e instanceof Error ? e.message : e}`);
       }

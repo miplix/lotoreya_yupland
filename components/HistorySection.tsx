@@ -91,7 +91,7 @@ export default function HistorySection({ history }: Props) {
   );
 }
 
-export async function doSend(result: RaffleResult): Promise<void> {
+async function sendOnce(result: RaffleResult): Promise<void> {
   const res = await fetch('/api/send-to-telegram', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -106,4 +106,16 @@ export async function doSend(result: RaffleResult): Promise<void> {
     const msg = Array.isArray(err.errors) ? err.errors.join('\n') : (err.error ?? 'Unknown error');
     throw new Error(msg);
   }
+}
+
+export async function doSend(result: RaffleResult, attempts = 3): Promise<void> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try { return await sendOnce(result); }
+    catch (e) {
+      lastErr = e;
+      if (i < attempts - 1) await new Promise(r => setTimeout(r, 2000 * (i + 1)));
+    }
+  }
+  throw lastErr;
 }
