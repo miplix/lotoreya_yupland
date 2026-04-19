@@ -19,12 +19,14 @@ function SlidePanel({
   onOpen,
   arrowDir,
   label,
+  bgImage,
 }: {
   children: React.ReactNode;
   isOpen: boolean;
   onOpen: () => void;
   arrowDir: 'left' | 'right';
   label: string;
+  bgImage?: string;
 }) {
   return (
     <div
@@ -35,8 +37,20 @@ function SlidePanel({
         transition: 'max-width 0.35s cubic-bezier(0.4,0,0.2,1)',
       }}
     >
+      {/* Background image */}
+      {bgImage && (
+        <img
+          src={bgImage}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 w-full h-full pointer-events-none select-none"
+          style={{ objectFit: 'contain', objectPosition: 'center', opacity: 0.35 }}
+        />
+      )}
+
       {/* Content */}
       <div
+        className="relative z-10"
         style={{
           opacity: isOpen ? 1 : 0,
           pointerEvents: isOpen ? 'auto' : 'none',
@@ -49,7 +63,7 @@ function SlidePanel({
 
       {/* Collapsed strip — big round arrow button */}
       <div
-        className="absolute inset-0 flex items-center justify-center"
+        className="absolute inset-0 z-10 flex items-center justify-center"
         style={{
           opacity: isOpen ? 0 : 1,
           pointerEvents: isOpen ? 'none' : 'auto',
@@ -84,6 +98,19 @@ export default function Home() {
 
   const totalTickets = getTotalTickets(state.queries);
   const available = totalTickets - state.usedNumbers.length;
+
+  // Find the NFT with the highest ticket count to use as prize panel background
+  const bgImage = (() => {
+    let best: { tickets: number; media: string } | null = null;
+    for (const q of state.queries) {
+      for (const nft of q.nfts) {
+        if (nft.media && (!best || nft.tickets > best.tickets)) {
+          best = { tickets: nft.tickets, media: nft.media };
+        }
+      }
+    }
+    return best?.media;
+  })();
 
   const handleSearchDone = (updatedQueries: NFTQuery[]) => {
     setState(prev => ({ ...prev, queries: updatedQueries }));
@@ -153,6 +180,7 @@ export default function Home() {
             onOpen={() => setActivePanel('prizes')}
             arrowDir="left"
             label="Открыть Призы"
+            bgImage={bgImage}
           >
             <PrizeSection
               prize={prize}

@@ -51,17 +51,18 @@ export default function PrizeSection({
         )}
       </div>
 
-      <input
-        className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-        placeholder="Название приза"
-        value={prize.name}
-        onChange={e => onChange({ ...prize, name: e.target.value })}
-      />
+      {/* Single-line: name | count | button */}
+      <div className="flex items-center gap-2 bg-gray-800/70 rounded-xl p-2">
+        <input
+          className="flex-1 min-w-0 bg-gray-700/80 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+          placeholder="Название приза"
+          value={prize.name}
+          onChange={e => onChange({ ...prize, name: e.target.value })}
+        />
 
-      <div className="flex items-center gap-3">
         <input
           ref={countRef}
-          className={`w-32 bg-gray-700 rounded-lg px-3 py-2 text-sm text-center focus:outline-none transition-colors
+          className={`w-20 shrink-0 bg-gray-700/80 rounded-lg px-2 py-2 text-sm text-center focus:outline-none transition-colors
             ${countInvalid
               ? 'border-2 border-red-500 focus:border-red-400'
               : 'border border-gray-600 focus:border-blue-500'}
@@ -73,18 +74,19 @@ export default function PrizeSection({
           onChange={e => setCountStr(e.target.value)}
           onBlur={() => { if (!countInvalid) onChange({ ...prize, count: parsedCount }); }}
         />
-        {over && (
-          <span className="text-yellow-400 text-xs">⚠️ будет разыграно {available}</span>
-        )}
+
+        <button
+          className="shrink-0 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 rounded-lg font-medium text-sm transition-colors whitespace-nowrap"
+          onClick={handleRaffle}
+          disabled={sending || available <= 0}
+        >
+          {sending ? 'Отправка...' : 'Провести розыгрыш'}
+        </button>
       </div>
 
-      <button
-        className="w-full py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 rounded-lg font-medium text-sm transition-colors"
-        onClick={handleRaffle}
-        disabled={sending || available <= 0}
-      >
-        {sending ? 'Отправка в TG...' : 'Провести розыгрыш'}
-      </button>
+      {over && (
+        <span className="text-yellow-400 text-xs">⚠️ будет разыграно {available}</span>
+      )}
     </div>
   );
 }

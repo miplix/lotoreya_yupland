@@ -3,6 +3,7 @@ export interface NFTItem {
   title: string;
   owner_id: string;
   tickets: number;
+  media?: string;
 }
 
 export interface NFTQuery {

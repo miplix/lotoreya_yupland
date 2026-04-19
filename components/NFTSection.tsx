@@ -88,6 +88,7 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
             title: item.title,
             owner_id: item.owner_id,
             tickets: extractTicketCount(item.title),
+            media: item.media,
           }));
         } catch {
           setErrors(prev => new Map(prev).set(q.id, 'Ошибка'));
