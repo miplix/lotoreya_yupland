@@ -5,5 +5,6 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const state = await getState();
-  return NextResponse.json(state);
+  const kvConfigured = Boolean(process.env.KV_REST_API_URL);
+  return NextResponse.json({ ...state, _kvConfigured: kvConfigured });
 }

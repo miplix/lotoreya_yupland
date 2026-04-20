@@ -11,6 +11,7 @@ export default function WatchPage() {
   const [animating, setAnimating] = useState<DrawState | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [connected, setConnected] = useState(false);
+  const [kvMissing, setKvMissing] = useState(false);
 
   // undefined = not yet initialized (skip animation on first load)
   const lastDrawId = useRef<string | null | undefined>(undefined);
@@ -20,9 +21,10 @@ export default function WatchPage() {
       try {
         const res = await fetch('/api/lottery-state');
         if (!res.ok) return;
-        const data: ServerState = await res.json();
+        const data: ServerState & { _kvConfigured?: boolean } = await res.json();
 
         setConnected(true);
+        setKvMissing(data._kvConfigured === false);
         setHistory(data.history ?? []);
         setLatestDraw(data.latestDraw);
 
@@ -73,6 +75,18 @@ export default function WatchPage() {
           </div>
           <span className="text-xs text-gray-500">Yupland · {new Date().getFullYear()}</span>
         </header>
+
+        {/* KV not configured warning */}
+        {kvMissing && (
+          <div className="rounded-xl bg-red-900/60 border border-red-500 p-3 text-xs">
+            <p className="font-semibold text-red-200 mb-1">⚠ Vercel KV не подключён</p>
+            <p className="text-red-100/90">
+              На Vercel без KV состояние теряется между инстансами.
+              Откройте проект на vercel.com → <b>Storage</b> → <b>Create Database</b> → <b>Upstash KV (Redis)</b> → <b>Connect Project</b>.
+              После подключения сделайте редеплой.
+            </p>
+          </div>
+        )}
 
         {/* Status card */}
         <div className="rounded-xl bg-gray-800 p-4 text-sm">
