@@ -104,7 +104,23 @@ export default function Home() {
   const [animData, setAnimData] = useState<AnimData | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { setState(loadState()); setMounted(true); }, []);
+  useEffect(() => {
+    const loaded = loadState();
+    setState(loaded);
+    setMounted(true);
+    // Синхронизируем localStorage → серверный стейт (для /watch)
+    if (loaded.history.length > 0) {
+      const latest = loaded.history[loaded.history.length - 1];
+      const latestDraw: DrawState = {
+        id: latest.id,
+        prizeLabel: latest.prizes.map(p => `${p.name} × ${p.count}`).join(' + '),
+        totalTickets: latest.totalTickets,
+        winners: latest.winners,
+        timestamp: latest.timestamp,
+      };
+      pushLotteryResult({ latestDraw, history: loaded.history }).catch(console.error);
+    }
+  }, []);
   useEffect(() => { if (mounted) saveState(state); }, [state, mounted]);
 
   const totalTickets = getTotalTickets(state.queries);
