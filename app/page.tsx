@@ -5,12 +5,21 @@ import NFTSection from '@/components/NFTSection';
 import PrizeSection from '@/components/PrizeSection';
 import HistorySection, { doSend } from '@/components/HistorySection';
 import ResultModal from '@/components/ResultModal';
-import { AppState, NFTQuery } from '@/lib/types';
+import LotteryAnimation from '@/components/LotteryAnimation';
+import { AppState, NFTQuery, RaffleResult, Winner, DrawState } from '@/lib/types';
 import { loadState, saveState, resetState, exportState, importState } from '@/lib/storage';
 import { runLottery, getTotalTickets } from '@/lib/lottery';
 import { formatRaffleText } from '@/lib/csv';
+import { pushLotteryResult } from '@/app/actions/lottery-actions';
 
 interface PrizeForm { name: string; count: number; }
+interface AnimData {
+  prizeLabel: string;
+  totalTickets: number;
+  winners: Winner[];
+  result: RaffleResult;
+  newHistory: RaffleResult[];
+}
 
 // Reusable slide panel — collapses horizontally leaving a narrow strip with big arrow
 function SlidePanel({
@@ -91,6 +100,7 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [activePanel, setActivePanel] = useState<'nft' | 'prizes'>('nft');
   const [resultText, setResultText] = useState<string | null>(null);
+  const [animData, setAnimData] = useState<AnimData | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setState(loadState()); setMounted(true); }, []);
@@ -129,13 +139,36 @@ export default function Home() {
       alert(`Призов больше доступных. Разыграно: ${result.csvData.reduce((s, r) => s + r.count, 0)} из ${prize.count}.`);
     }
 
-    setState(prev => ({ ...prev, history: [...prev.history, result], usedNumbers: newUsedNumbers }));
+    const newHistory = [...state.history, result];
+    setState(prev => ({ ...prev, history: newHistory, usedNumbers: newUsedNumbers }));
+
+    const prizeLabel = result.prizes.map(p => `${p.name} × ${p.count}`).join(' + ');
+    setAnimData({ prizeLabel, totalTickets, winners: result.winners, result, newHistory });
+  };
+
+  const handleAnimationDone = async () => {
+    if (!animData) return;
+    const { result, prizeLabel, newHistory } = animData;
+    setAnimData(null);
+
+    // Show result text in modal
     setResultText(formatRaffleText(result));
 
+    // Send to Telegram
     setSending(true);
     try { await doSend(result); }
     catch (e) { alert(`Розыгрыш сохранён, ошибка TG:\n${e instanceof Error ? e.message : e}`); }
     finally { setSending(false); }
+
+    // Push to spectator page (fire and forget)
+    const draw: DrawState = {
+      id: result.id,
+      prizeLabel,
+      totalTickets: animData.totalTickets,
+      winners: result.winners,
+      timestamp: result.timestamp,
+    };
+    pushLotteryResult({ latestDraw: draw, history: newHistory }).catch(console.error);
   };
 
   const handleReset = () => {
@@ -157,7 +190,21 @@ export default function Home() {
       <div className="max-w-5xl mx-auto space-y-4">
         <header className="flex items-center justify-between">
           <h1 className="text-2xl font-bold tracking-tight">NFT Lottery Raffle</h1>
-          <span className="text-xs text-gray-500">Yupland · {new Date().getFullYear()}</span>
+          <div className="flex items-center gap-4">
+            <a
+              href="/watch"
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs transition-colors flex items-center gap-1.5"
+            >
+              <span
+                className="inline-block w-1.5 h-1.5 rounded-full bg-green-400"
+                style={{ boxShadow: '0 0 5px rgba(74,222,128,0.8)' }}
+              />
+              Эфир
+            </a>
+            <span className="text-xs text-gray-500">Yupland · {new Date().getFullYear()}</span>
+          </div>
         </header>
 
         {/* Horizontal slide panels */}
@@ -205,6 +252,15 @@ export default function Home() {
       </div>
 
       {resultText && <ResultModal text={resultText} onClose={() => setResultText(null)} />}
+
+      {animData && (
+        <LotteryAnimation
+          prizeLabel={animData.prizeLabel}
+          totalTickets={animData.totalTickets}
+          winners={animData.winners}
+          onDone={handleAnimationDone}
+        />
+      )}
     </main>
   );
 }

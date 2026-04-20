@@ -39,3 +39,16 @@ export interface AppState {
   history: RaffleResult[];
   usedNumbers: number[]; // winning numbers from all previous raffles in this session
 }
+
+export interface DrawState {
+  id: string;
+  prizeLabel: string;
+  totalTickets: number;
+  winners: Winner[];
+  timestamp: number;
+}
+
+export interface ServerState {
+  history: RaffleResult[];
+  latestDraw: DrawState | null;
+}
