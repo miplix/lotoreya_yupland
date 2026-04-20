@@ -170,9 +170,9 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
 
       {hasResults && (
         <div className="border border-gray-700 rounded-lg overflow-hidden">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
-            <span className="text-xs text-gray-400">{ranges.length} участников · {totalTickets} билетов</span>
-            <div className="flex gap-1.5">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700 gap-2">
+            <span className="text-xs text-gray-400 min-w-0 truncate">{ranges.length} уч. · {totalTickets} бил.</span>
+            <div className="flex gap-1.5 shrink-0">
               <button
                 className="px-2.5 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
                 onClick={() => {

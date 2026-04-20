@@ -158,8 +158,12 @@ export default function LotteryAnimation({
     N === 1 ? 'lg' : N <= 3 ? 'md' : 'sm';
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/93 p-4 overflow-y-auto">
-      <div className="w-full max-w-2xl flex flex-col items-center gap-4 py-4">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto"
+      style={{ background: 'rgba(0,0,0,0.88)' }}
+    >
+      <div className="w-full max-w-2xl flex flex-col items-center gap-4 py-6 px-4 rounded-2xl"
+        style={{ background: 'rgba(10,15,28,0.97)', boxShadow: '0 0 80px rgba(0,0,0,0.95), 0 0 0 1px rgba(74,222,128,0.1)' }}
+      >
 
         {/* Header */}
         <div className="text-center shrink-0">

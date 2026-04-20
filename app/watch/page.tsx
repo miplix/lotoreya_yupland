@@ -124,22 +124,33 @@ export default function WatchPage() {
         )}
 
         {/* Status card */}
-        <div className="rounded-xl bg-gray-800 p-4 text-sm">
-          {latestDraw ? (
-            <>
-              <p className="text-xs text-gray-500 mb-0.5">Последний розыгрыш</p>
-              <p className="font-semibold text-white">{latestDraw.prizeLabel}</p>
-              <p className="text-xs text-gray-400 mt-0.5">
-                {new Date(latestDraw.timestamp).toLocaleString('ru-RU')}
-                {' · '}
-                {latestDraw.winners.reduce((s, w) => s + w.prizeCount, 0)} призов
-                {' · '}
-                {latestDraw.winners.length} победит.
-              </p>
-            </>
-          ) : (
-            <p className="text-gray-500">Ожидание розыгрыша...</p>
+        <div className="rounded-xl bg-gray-800 p-4 text-sm relative overflow-hidden">
+          {latestDraw?.bgImage && (
+            <img
+              src={latestDraw.bgImage}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 w-full h-full pointer-events-none select-none"
+              style={{ objectFit: 'contain', objectPosition: 'center', opacity: 0.18 }}
+            />
           )}
+          <div className="relative z-10">
+            {latestDraw ? (
+              <>
+                <p className="text-xs text-gray-500 mb-0.5">Последний розыгрыш</p>
+                <p className="font-semibold text-white">{latestDraw.prizeLabel}</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {new Date(latestDraw.timestamp).toLocaleString('ru-RU')}
+                  {' · '}
+                  {latestDraw.winners.reduce((s, w) => s + w.prizeCount, 0)} призов
+                  {' · '}
+                  {latestDraw.winners.length} победит.
+                </p>
+              </>
+            ) : (
+              <p className="text-gray-500">Ожидание розыгрыша...</p>
+            )}
+          </div>
         </div>
 
         {/* History */}

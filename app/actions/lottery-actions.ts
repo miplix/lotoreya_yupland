@@ -1,6 +1,6 @@
 'use server';
 
-import { patchState } from '@/lib/server-state';
+import { patchState, clearState } from '@/lib/server-state';
 import { DrawState, RaffleResult } from '@/lib/types';
 
 export async function pushLotteryResult(data: {
@@ -8,4 +8,8 @@ export async function pushLotteryResult(data: {
   history: RaffleResult[];
 }): Promise<void> {
   await patchState(data);
+}
+
+export async function clearLotteryState(): Promise<void> {
+  await clearState();
 }

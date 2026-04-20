@@ -47,6 +47,7 @@ export interface DrawState {
   winners: Winner[];
   timestamp: number;
   simultaneousCount?: number;
+  bgImage?: string;
 }
 
 export interface ServerState {

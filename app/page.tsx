@@ -10,7 +10,7 @@ import { AppState, NFTQuery, RaffleResult, Winner, DrawState } from '@/lib/types
 import { loadState, saveState, resetState, exportState, importState } from '@/lib/storage';
 import { runLottery, getTotalTickets } from '@/lib/lottery';
 import { formatRaffleText } from '@/lib/csv';
-import { pushLotteryResult } from '@/app/actions/lottery-actions';
+import { pushLotteryResult, clearLotteryState } from '@/app/actions/lottery-actions';
 
 interface PrizeForm { name: string; count: number; simultaneousCount: number; }
 interface AnimData {
@@ -20,6 +20,7 @@ interface AnimData {
   winners: Winner[];
   result: RaffleResult;
   newHistory: RaffleResult[];
+  bgImage?: string;
 }
 
 // Reusable slide panel — collapses horizontally leaving a narrow strip with big arrow
@@ -30,6 +31,7 @@ function SlidePanel({
   arrowDir,
   label,
   bgImage,
+  mobile = false,
 }: {
   children: React.ReactNode;
   isOpen: boolean;
@@ -37,7 +39,22 @@ function SlidePanel({
   arrowDir: 'left' | 'right';
   label: string;
   bgImage?: string;
+  mobile?: boolean;
 }) {
+  if (mobile) {
+    return (
+      <div className="relative rounded-xl bg-gray-800 overflow-hidden w-full">
+        {bgImage && (
+          <img src={bgImage} alt="" aria-hidden
+            className="absolute inset-0 w-full h-full pointer-events-none select-none"
+            style={{ objectFit: 'contain', objectPosition: 'center', opacity: 0.35 }}
+          />
+        )}
+        <div className="relative z-10">{children}</div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="relative rounded-xl bg-gray-800 overflow-hidden flex-1"
@@ -47,7 +64,6 @@ function SlidePanel({
         transition: 'max-width 0.35s cubic-bezier(0.4,0,0.2,1)',
       }}
     >
-      {/* Background image */}
       {bgImage && (
         <img
           src={bgImage}
@@ -58,7 +74,6 @@ function SlidePanel({
         />
       )}
 
-      {/* Content */}
       <div
         className="relative z-10"
         style={{
@@ -71,7 +86,6 @@ function SlidePanel({
         {children}
       </div>
 
-      {/* Collapsed strip — big round arrow button */}
       <div
         className="absolute inset-0 z-10 flex items-center justify-center"
         style={{
@@ -99,10 +113,18 @@ export default function Home() {
   const [prize, setPrize] = useState<PrizeForm>({ name: '', count: 1, simultaneousCount: 10 });
   const [sending, setSending] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [activePanel, setActivePanel] = useState<'nft' | 'prizes'>('nft');
   const [resultText, setResultText] = useState<string | null>(null);
   const [animData, setAnimData] = useState<AnimData | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   useEffect(() => {
     const loaded = loadState();
@@ -160,7 +182,7 @@ export default function Home() {
     setState(prev => ({ ...prev, history: newHistory, usedNumbers: newUsedNumbers }));
 
     const prizeLabel = result.prizes.map(p => `${p.name} × ${p.count}`).join(' + ');
-    setAnimData({ prizeLabel, totalTickets, simultaneousCount: prize.simultaneousCount, winners: result.winners, result, newHistory });
+    setAnimData({ prizeLabel, totalTickets, simultaneousCount: prize.simultaneousCount, winners: result.winners, result, newHistory, bgImage });
   };
 
   const handleAnimationDone = async () => {
@@ -185,6 +207,7 @@ export default function Home() {
       simultaneousCount: animData.simultaneousCount,
       winners: result.winners,
       timestamp: result.timestamp,
+      bgImage: animData.bgImage,
     };
     pushLotteryResult({ latestDraw: draw, history: newHistory }).catch(console.error);
   };
@@ -192,6 +215,7 @@ export default function Home() {
   const handleReset = () => {
     if (!confirm('Сбросить все данные? Необратимо.')) return;
     setState(resetState());
+    clearLotteryState().catch(console.error);
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -204,11 +228,11 @@ export default function Home() {
   if (!mounted) return null;
 
   return (
-    <main className="min-h-screen p-4 md:p-8">
-      <div className="max-w-5xl mx-auto space-y-4">
-        <header className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-tight">NFT Lottery Raffle</h1>
-          <div className="flex items-center gap-4">
+    <main className="min-h-screen p-3 md:p-8">
+      <div className="max-w-5xl mx-auto space-y-3 md:space-y-4">
+        <header className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-lg md:text-2xl font-bold tracking-tight">NFT Lottery Raffle</h1>
+          <div className="flex items-center gap-3">
             <a
               href="/watch"
               target="_blank"
@@ -225,13 +249,14 @@ export default function Home() {
           </div>
         </header>
 
-        {/* Horizontal slide panels */}
-        <div className="flex gap-4" style={{ minHeight: '320px' }}>
+        {/* Panels: stacked on mobile, side-by-side on desktop */}
+        <div className={isMobile ? 'flex flex-col gap-3' : 'flex gap-4'} style={isMobile ? {} : { minHeight: '320px' }}>
           <SlidePanel
             isOpen={activePanel === 'nft'}
             onOpen={() => setActivePanel('nft')}
             arrowDir="right"
             label="Открыть NFT / Билеты"
+            mobile={isMobile}
           >
             <NFTSection
               queries={state.queries}
@@ -246,6 +271,7 @@ export default function Home() {
             arrowDir="left"
             label="Открыть Призы"
             bgImage={bgImage}
+            mobile={isMobile}
           >
             <PrizeSection
               prize={prize}
@@ -259,11 +285,11 @@ export default function Home() {
         </div>
 
         {/* Utility buttons */}
-        <div className="flex justify-end gap-2">
-          <button className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors" onClick={() => exportState(state)}>Экспорт</button>
-          <button className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors" onClick={() => importRef.current?.click()}>Импорт</button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <button className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors" onClick={() => exportState(state)}>Экспорт</button>
+          <button className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors" onClick={() => importRef.current?.click()}>Импорт</button>
           <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
-          <button className="px-4 py-2 bg-red-900 hover:bg-red-800 rounded-lg text-sm transition-colors" onClick={handleReset}>Сбросить всё</button>
+          <button className="px-3 py-2 bg-red-900 hover:bg-red-800 rounded-lg text-sm transition-colors" onClick={handleReset}>Сбросить всё</button>
         </div>
 
         <HistorySection history={state.history} />

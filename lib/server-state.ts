@@ -115,6 +115,17 @@ export async function getState(): Promise<ServerState> {
   return localGet() ?? { ...DEFAULT };
 }
 
+export async function clearState(): Promise<void> {
+  const empty: ServerState = { history: [], latestDraw: null };
+  if (process.env.REDIS_URL || process.env.KV_URL) {
+    await redisSet(empty);
+  } else if (process.env.KV_REST_API_URL) {
+    await kvSet(empty);
+  } else {
+    localSet(empty);
+  }
+}
+
 export async function patchState(data: {
   history?: RaffleResult[];
   latestDraw?: DrawState | null;

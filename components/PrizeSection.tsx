@@ -69,37 +69,37 @@ export default function PrizeSection({
         <span className="text-xs text-gray-500">макс. 10</span>
       </div>
 
-      {/* Single-line: name | count | button */}
-      <div className="flex items-center gap-2 bg-gray-800/70 rounded-xl p-2">
+      {/* Prize form — stacks on mobile, row on sm+ */}
+      <div className="flex flex-col gap-2 bg-gray-800/70 rounded-xl p-2">
         <input
-          className="flex-1 min-w-0 bg-gray-700/80 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+          className="w-full bg-gray-700/80 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
           placeholder="Название приза"
           value={prize.name}
           onChange={e => onChange({ ...prize, name: e.target.value })}
         />
-
-        <input
-          ref={countRef}
-          className={`w-20 shrink-0 bg-gray-700/80 rounded-lg px-2 py-2 text-sm text-center focus:outline-none transition-colors
-            ${countInvalid
-              ? 'border-2 border-red-500 focus:border-red-400'
-              : 'border border-gray-600 focus:border-blue-500'}
-            ${shake ? 'shake' : ''}`}
-          type="number"
-          min={1}
-          placeholder="Кол-во"
-          value={countStr}
-          onChange={e => setCountStr(e.target.value)}
-          onBlur={() => { if (!countInvalid) onChange({ ...prize, count: parsedCount }); }}
-        />
-
-        <button
-          className="shrink-0 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 rounded-lg font-medium text-sm transition-colors whitespace-nowrap"
-          onClick={handleRaffle}
-          disabled={sending || available <= 0}
-        >
-          {sending ? 'Отправка...' : 'Провести розыгрыш'}
-        </button>
+        <div className="flex gap-2">
+          <input
+            ref={countRef}
+            className={`w-24 shrink-0 bg-gray-700/80 rounded-lg px-2 py-2 text-sm text-center focus:outline-none transition-colors
+              ${countInvalid
+                ? 'border-2 border-red-500 focus:border-red-400'
+                : 'border border-gray-600 focus:border-blue-500'}
+              ${shake ? 'shake' : ''}`}
+            type="number"
+            min={1}
+            placeholder="Кол-во"
+            value={countStr}
+            onChange={e => setCountStr(e.target.value)}
+            onBlur={() => { if (!countInvalid) onChange({ ...prize, count: parsedCount }); }}
+          />
+          <button
+            className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 rounded-lg font-medium text-sm transition-colors"
+            onClick={handleRaffle}
+            disabled={sending || available <= 0}
+          >
+            {sending ? 'Отправка...' : 'Провести розыгрыш'}
+          </button>
+        </div>
       </div>
 
       {over && (
