@@ -160,6 +160,7 @@ export default function WatchPage() {
         <LotteryAnimation
           prizeLabel={animating.prizeLabel}
           totalTickets={animating.totalTickets}
+          simultaneousCount={animating.simultaneousCount ?? 5}
           winners={animating.winners}
           onDone={() => setAnimating(null)}
         />

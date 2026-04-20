@@ -1,0 +1,16 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lottery-dev",
+      "runtimeExecutable": "/Users/zolotoy/.nvm/versions/node/v22.22.2/bin/node",
+      "runtimeArgs": ["./node_modules/.bin/next", "dev"],
+      "port": 3001,
+      "autoPort": true,
+      "env": {
+        "PATH": "/Users/zolotoy/.nvm/versions/node/v22.22.2/bin:/usr/local/bin:/usr/bin:/bin",
+        "NODE_ENV": "development"
+      }
+    }
+  ]
+}

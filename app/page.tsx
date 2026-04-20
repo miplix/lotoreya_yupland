@@ -12,10 +12,11 @@ import { runLottery, getTotalTickets } from '@/lib/lottery';
 import { formatRaffleText } from '@/lib/csv';
 import { pushLotteryResult } from '@/app/actions/lottery-actions';
 
-interface PrizeForm { name: string; count: number; }
+interface PrizeForm { name: string; count: number; simultaneousCount: number; }
 interface AnimData {
   prizeLabel: string;
   totalTickets: number;
+  simultaneousCount: number;
   winners: Winner[];
   result: RaffleResult;
   newHistory: RaffleResult[];
@@ -95,7 +96,7 @@ function SlidePanel({
 
 export default function Home() {
   const [state, setState] = useState<AppState>({ queries: [], history: [], usedNumbers: [] });
-  const [prize, setPrize] = useState<PrizeForm>({ name: '', count: 1 });
+  const [prize, setPrize] = useState<PrizeForm>({ name: '', count: 1, simultaneousCount: 10 });
   const [sending, setSending] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [activePanel, setActivePanel] = useState<'nft' | 'prizes'>('nft');
@@ -143,7 +144,7 @@ export default function Home() {
     setState(prev => ({ ...prev, history: newHistory, usedNumbers: newUsedNumbers }));
 
     const prizeLabel = result.prizes.map(p => `${p.name} × ${p.count}`).join(' + ');
-    setAnimData({ prizeLabel, totalTickets, winners: result.winners, result, newHistory });
+    setAnimData({ prizeLabel, totalTickets, simultaneousCount: prize.simultaneousCount, winners: result.winners, result, newHistory });
   };
 
   const handleAnimationDone = async () => {
@@ -165,6 +166,7 @@ export default function Home() {
       id: result.id,
       prizeLabel,
       totalTickets: animData.totalTickets,
+      simultaneousCount: animData.simultaneousCount,
       winners: result.winners,
       timestamp: result.timestamp,
     };
@@ -257,6 +259,7 @@ export default function Home() {
         <LotteryAnimation
           prizeLabel={animData.prizeLabel}
           totalTickets={animData.totalTickets}
+          simultaneousCount={animData.simultaneousCount}
           winners={animData.winners}
           onDone={handleAnimationDone}
         />

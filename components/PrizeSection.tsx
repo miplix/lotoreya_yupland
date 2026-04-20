@@ -5,6 +5,7 @@ import { useState, useRef } from 'react';
 interface PrizeForm {
   name: string;
   count: number;
+  simultaneousCount: number;
 }
 
 interface Props {
@@ -51,6 +52,23 @@ export default function PrizeSection({
         )}
       </div>
 
+      {/* Simultaneous count setting */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-400">Рандомно выбирать по:</span>
+        <input
+          type="number"
+          min={1}
+          max={10}
+          className="w-14 bg-gray-700/80 border border-gray-600 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:border-blue-500"
+          value={prize.simultaneousCount}
+          onChange={e => {
+            const v = Math.max(1, Math.min(10, parseInt(e.target.value) || 10));
+            onChange({ ...prize, simultaneousCount: v });
+          }}
+        />
+        <span className="text-xs text-gray-500">макс. 10</span>
+      </div>
+
       {/* Single-line: name | count | button */}
       <div className="flex items-center gap-2 bg-gray-800/70 rounded-xl p-2">
         <input
@@ -85,7 +103,7 @@ export default function PrizeSection({
       </div>
 
       {over && (
-        <span className="text-yellow-400 text-xs">⚠️ будет разыграно {available}</span>
+        <span className="text-yellow-400 text-xs">будет разыграно {available}</span>
       )}
     </div>
   );
