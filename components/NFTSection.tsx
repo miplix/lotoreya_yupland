@@ -28,6 +28,7 @@ async function sendOverview(queries: NFTQuery[]): Promise<void> {
 export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Map<string, string>>(new Map());
+  const [copied, setCopied] = useState(false);
   // IDs of queries that passed the silent 1-sec debounce check (≥1 NFT found)
   const [validated, setValidated] = useState<Set<string>>(new Set());
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -176,9 +177,12 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
                 className="px-2.5 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
                 onClick={() => {
                   const text = ranges.map(r => `${r.wallet},${r.tickets}`).join('\n');
-                  navigator.clipboard.writeText(text).catch(() => {});
+                  navigator.clipboard.writeText(text)
+                    .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); })
+                    .catch(() => {});
                 }}
-              >Копировать</button>
+                style={{ minWidth: '7rem' }}
+              >{copied ? '✓ Скопировано' : 'Копировать'}</button>
               <button
                 className="px-2.5 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
                 onClick={() => {

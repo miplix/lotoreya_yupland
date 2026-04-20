@@ -13,7 +13,12 @@ export default function WatchPage() {
   const [connected, setConnected] = useState(false);
   const [kvMissing, setKvMissing] = useState(false);
 
-  // undefined = not yet initialized (skip animation on first load)
+  // Auth modal
+  const [showLogin, setShowLogin] = useState(false);
+  const [keyInput, setKeyInput] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+
   const lastDrawId = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
@@ -29,14 +34,12 @@ export default function WatchPage() {
         setLatestDraw(data.latestDraw);
 
         if (lastDrawId.current === undefined) {
-          // First load — mark current draw as seen, don't replay old animation
           lastDrawId.current = data.latestDraw?.id ?? null;
         } else if (data.latestDraw && data.latestDraw.id !== lastDrawId.current) {
-          // New draw detected while watching — trigger animation
           lastDrawId.current = data.latestDraw.id;
           setAnimating(data.latestDraw);
         }
-      } catch { /* ignore network errors */ }
+      } catch { /* ignore */ }
     };
 
     poll();
@@ -50,6 +53,30 @@ export default function WatchPage() {
       s.has(id) ? s.delete(id) : s.add(id);
       return s;
     });
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!keyInput.trim()) return;
+    setLoginLoading(true);
+    setLoginError('');
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: keyInput }),
+      });
+      if (res.ok) {
+        window.location.href = '/';
+      } else {
+        const data = await res.json();
+        setLoginError(data.error ?? 'Неверный ключ');
+      }
+    } catch {
+      setLoginError('Ошибка соединения');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
 
   return (
     <main className="min-h-screen p-4 md:p-8">
@@ -73,7 +100,15 @@ export default function WatchPage() {
               </span>
             </div>
           </div>
-          <span className="text-xs text-gray-500">Yupland · {new Date().getFullYear()}</span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-500">Yupland · {new Date().getFullYear()}</span>
+            <button
+              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs transition-colors"
+              onClick={() => { setShowLogin(true); setKeyInput(''); setLoginError(''); }}
+            >
+              Войти
+            </button>
+          </div>
         </header>
 
         {/* KV not configured warning */}
@@ -169,7 +204,7 @@ export default function WatchPage() {
         )}
       </div>
 
-      {/* Animation overlay — only shown when a new draw is detected */}
+      {/* Animation overlay */}
       {animating && (
         <LotteryAnimation
           prizeLabel={animating.prizeLabel}
@@ -178,6 +213,49 @@ export default function WatchPage() {
           winners={animating.winners}
           onDone={() => setAnimating(null)}
         />
+      )}
+
+      {/* Login modal */}
+      {showLogin && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onClick={e => { if (e.target === e.currentTarget) setShowLogin(false); }}
+        >
+          <form
+            onSubmit={handleLogin}
+            className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-80 space-y-4 shadow-2xl"
+          >
+            <h2 className="text-base font-semibold text-white">Доступ к розыгрышу</h2>
+            <input
+              type="password"
+              autoComplete="off"
+              placeholder="Введите ключ доступа"
+              value={keyInput}
+              onChange={e => setKeyInput(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 text-white"
+              autoFocus
+            />
+            {loginError && (
+              <p className="text-red-400 text-xs">{loginError}</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={loginLoading || !keyInput.trim()}
+                className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 rounded-lg text-sm font-medium transition-colors"
+              >
+                {loginLoading ? 'Проверка...' : 'Подтвердить'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowLogin(false)}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </main>
   );
