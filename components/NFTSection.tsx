@@ -168,15 +168,39 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
       </button>
 
       {hasResults && (
-        <div className="border border-gray-700 rounded-lg p-3 space-y-1 text-xs max-h-52 overflow-y-auto">
-          {ranges.map(({ wallet, tickets, start, end }) => (
-            <div key={wallet} className="flex justify-between gap-2 text-gray-400">
-              <span className="truncate">{wallet}</span>
-              <span className="shrink-0 text-gray-300">
-                {tickets} <span className="text-gray-600">({start}–{end})</span>
-              </span>
+        <div className="border border-gray-700 rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700">
+            <span className="text-xs text-gray-400">{ranges.length} участников · {totalTickets} билетов</span>
+            <div className="flex gap-1.5">
+              <button
+                className="px-2.5 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
+                onClick={() => {
+                  const text = ranges.map(r => `${r.wallet},${r.tickets}`).join('\n');
+                  navigator.clipboard.writeText(text).catch(() => {});
+                }}
+              >Копировать</button>
+              <button
+                className="px-2.5 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
+                onClick={() => {
+                  const csv = 'address,count\n' + ranges.map(r => `${r.wallet},${r.tickets}`).join('\n');
+                  const a = document.createElement('a');
+                  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+                  a.download = `participants-${Date.now()}.csv`;
+                  a.click();
+                }}
+              >CSV ↓</button>
             </div>
-          ))}
+          </div>
+          <div className="p-3 space-y-1 text-xs max-h-52 overflow-y-auto">
+            {ranges.map(({ wallet, tickets, start, end }) => (
+              <div key={wallet} className="flex justify-between gap-2 text-gray-400">
+                <span className="truncate">{wallet}</span>
+                <span className="shrink-0 text-gray-300">
+                  {tickets} <span className="text-gray-600">({start}–{end})</span>
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
