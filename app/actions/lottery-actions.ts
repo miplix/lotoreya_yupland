@@ -13,3 +13,7 @@ export async function pushLotteryResult(data: {
 export async function clearLotteryState(): Promise<void> {
   await clearState();
 }
+
+export async function pushBgImage(bgImage: string | null): Promise<void> {
+  await patchState({ bgImage });
+}

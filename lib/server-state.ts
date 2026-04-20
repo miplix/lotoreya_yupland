@@ -129,10 +129,12 @@ export async function clearState(): Promise<void> {
 export async function patchState(data: {
   history?: RaffleResult[];
   latestDraw?: DrawState | null;
+  bgImage?: string | null;
 }): Promise<void> {
   const s = { ...(await getState()) };
   if (data.history !== undefined) s.history = data.history;
   if ('latestDraw' in data) s.latestDraw = data.latestDraw ?? null;
+  if ('bgImage' in data) s.bgImage = data.bgImage ?? null;
 
   if (process.env.REDIS_URL || process.env.KV_URL) {
     await redisSet(s);

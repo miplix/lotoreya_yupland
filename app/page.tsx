@@ -10,7 +10,7 @@ import { AppState, NFTQuery, RaffleResult, Winner, DrawState } from '@/lib/types
 import { loadState, saveState, resetState, exportState, importState } from '@/lib/storage';
 import { runLottery, getTotalTickets } from '@/lib/lottery';
 import { formatRaffleText } from '@/lib/csv';
-import { pushLotteryResult, clearLotteryState } from '@/app/actions/lottery-actions';
+import { pushLotteryResult, clearLotteryState, pushBgImage } from '@/app/actions/lottery-actions';
 
 interface PrizeForm { name: string; count: number; simultaneousCount: number; }
 interface AnimData {
@@ -164,6 +164,16 @@ export default function Home() {
   const handleSearchDone = (updatedQueries: NFTQuery[]) => {
     setState(prev => ({ ...prev, queries: updatedQueries }));
     setActivePanel('prizes');
+
+    let best: { tickets: number; media: string } | null = null;
+    for (const q of updatedQueries) {
+      for (const nft of q.nfts) {
+        if (nft.media && (!best || nft.tickets > best.tickets)) {
+          best = { tickets: nft.tickets, media: nft.media };
+        }
+      }
+    }
+    pushBgImage(best?.media ?? null).catch(console.error);
   };
 
   const handleLottery = async () => {

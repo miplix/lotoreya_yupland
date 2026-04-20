@@ -53,4 +53,5 @@ export interface DrawState {
 export interface ServerState {
   history: RaffleResult[];
   latestDraw: DrawState | null;
+  bgImage?: string | null;
 }

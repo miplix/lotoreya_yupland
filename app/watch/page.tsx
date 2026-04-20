@@ -12,6 +12,7 @@ export default function WatchPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [connected, setConnected] = useState(false);
   const [kvMissing, setKvMissing] = useState(false);
+  const [bgImage, setBgImage] = useState<string | null>(null);
 
   // Auth modal
   const [showLogin, setShowLogin] = useState(false);
@@ -32,6 +33,7 @@ export default function WatchPage() {
         setKvMissing(data._kvConfigured === false);
         setHistory(data.history ?? []);
         setLatestDraw(data.latestDraw);
+        setBgImage(data.bgImage ?? null);
 
         if (lastDrawId.current === undefined) {
           lastDrawId.current = data.latestDraw?.id ?? null;
@@ -125,9 +127,9 @@ export default function WatchPage() {
 
         {/* Status card */}
         <div className="rounded-xl bg-gray-800 p-4 text-sm relative overflow-hidden">
-          {latestDraw?.bgImage && (
+          {(bgImage || latestDraw?.bgImage) && (
             <img
-              src={latestDraw.bgImage}
+              src={(bgImage ?? latestDraw?.bgImage)!}
               alt=""
               aria-hidden
               className="absolute inset-0 w-full h-full pointer-events-none select-none"
@@ -240,9 +242,12 @@ export default function WatchPage() {
             {/* Hidden username helps browsers associate the saved credential */}
             <input type="text" name="username" value="operator" autoComplete="username" readOnly style={{ display: 'none' }} aria-hidden="true" />
             <input
-              type="password"
+              type="text"
               name="password"
               autoComplete="current-password"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
               placeholder="Введите ключ доступа"
               value={keyInput}
               onChange={e => setKeyInput(e.target.value)}
