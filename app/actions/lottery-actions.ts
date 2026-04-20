@@ -7,5 +7,5 @@ export async function pushLotteryResult(data: {
   latestDraw: DrawState;
   history: RaffleResult[];
 }): Promise<void> {
-  patchState(data);
+  await patchState(data);
 }

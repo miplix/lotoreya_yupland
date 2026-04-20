@@ -4,5 +4,6 @@ import { getState } from '@/lib/server-state';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  return NextResponse.json(getState());
+  const state = await getState();
+  return NextResponse.json(state);
 }
