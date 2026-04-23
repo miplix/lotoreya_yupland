@@ -110,7 +110,7 @@ function SlidePanel({
 
 export default function Home() {
   const [state, setState] = useState<AppState>({ queries: [], history: [], usedNumbers: [] });
-  const [prize, setPrize] = useState<PrizeForm>({ name: '', count: 1, simultaneousCount: 10 });
+  const [prize, setPrize] = useState<PrizeForm>({ name: '', count: 1, simultaneousCount: 50 });
   const [sending, setSending] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
