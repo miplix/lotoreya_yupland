@@ -7,6 +7,12 @@ export interface WalletRange {
   end: number;
 }
 
+// Service wallets excluded from all draws and participant lists
+const BLACKLIST = new Set([
+  'sendler-alchemy.near',
+  'darai_collection.near',
+]);
+
 // Deduplicates by token_id, returns sorted map by ticket count descending
 export function aggregateWalletTickets(queries: NFTQuery[]): Map<string, number> {
   const seen = new Set<string>();
@@ -15,6 +21,7 @@ export function aggregateWalletTickets(queries: NFTQuery[]): Map<string, number>
     for (const nft of q.nfts) {
       if (seen.has(nft.token_id)) continue;
       seen.add(nft.token_id);
+      if (BLACKLIST.has(nft.owner_id)) continue;
       map.set(nft.owner_id, (map.get(nft.owner_id) ?? 0) + nft.tickets);
     }
   }

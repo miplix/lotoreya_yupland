@@ -58,15 +58,15 @@ export default function PrizeSection({
         <input
           type="number"
           min={1}
-          max={10}
+          max={50}
           className="w-14 bg-gray-700/80 border border-gray-600 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:border-blue-500"
           value={prize.simultaneousCount}
           onChange={e => {
-            const v = Math.max(1, Math.min(10, parseInt(e.target.value) || 10));
+            const v = Math.max(1, Math.min(50, parseInt(e.target.value) || 10));
             onChange({ ...prize, simultaneousCount: v });
           }}
         />
-        <span className="text-xs text-gray-500">макс. 10</span>
+        <span className="text-xs text-gray-500">макс. 50</span>
       </div>
 
       {/* Prize form — stacks on mobile, row on sm+ */}
