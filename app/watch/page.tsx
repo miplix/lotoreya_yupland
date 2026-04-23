@@ -5,6 +5,10 @@ import { DrawState, RaffleResult, ServerState } from '@/lib/types';
 import { generateCSV, downloadCSV, makeFilename } from '@/lib/csv';
 import LotteryAnimation from '@/components/LotteryAnimation';
 
+function shortAddr(addr: string) {
+  return addr.length > 25 ? `${addr.slice(0, 8)}…${addr.slice(-8)}` : addr;
+}
+
 export default function WatchPage() {
   const [history, setHistory] = useState<RaffleResult[]>([]);
   const [latestDraw, setLatestDraw] = useState<DrawState | null>(null);
@@ -193,15 +197,15 @@ export default function WatchPage() {
 
                 {expanded.has(result.id) && (
                   <div className="border-t border-gray-700 p-3">
-                    <div className="text-xs space-y-1 max-h-56 overflow-y-auto">
+                    <div className="text-sm space-y-2 max-h-56 overflow-y-auto">
                       <p className="font-medium text-gray-300 mb-2">Победители:</p>
                       {result.winners.map(w => (
                         <div key={w.wallet} className="py-0.5">
-                          <div className="flex justify-between gap-2 text-gray-400">
-                            <span className="truncate">{w.wallet}</span>
-                            <span className="shrink-0 text-gray-200">{w.prizeCount} шт</span>
+                          <div className="flex justify-between gap-2">
+                            <span className="text-gray-200 font-medium">{shortAddr(w.wallet)}</span>
+                            <span className="shrink-0 text-white font-semibold">{w.prizeCount} шт</span>
                           </div>
-                          <div className="text-gray-600 break-all leading-relaxed">
+                          <div className="text-gray-400 break-words leading-relaxed mt-0.5">
                             {w.winningNumbers.join(', ')}
                           </div>
                         </div>
