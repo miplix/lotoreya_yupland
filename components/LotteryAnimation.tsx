@@ -11,7 +11,7 @@ interface SlotProps {
   target: number;
   totalTickets: number;
   staggerMs: number;
-  size: 'lg' | 'md' | 'sm';
+  size: 'lg' | 'md' | 'sm' | 'xs';
   onLocked: () => void;
 }
 
@@ -66,7 +66,8 @@ function Slot({ target, totalTickets, staggerMs, size, onLocked }: SlotProps) {
   const cls =
     size === 'lg' ? 'h-24 text-5xl' :
     size === 'md' ? 'h-20 text-4xl' :
-                   'h-14 text-3xl';
+    size === 'sm' ? 'h-14 text-3xl' :
+                   'h-9 text-lg';
 
   return (
     <div
@@ -98,7 +99,7 @@ interface Props {
 export default function LotteryAnimation({
   prizeLabel, totalTickets, winners, simultaneousCount, onDone,
 }: Props) {
-  const N = Math.max(1, Math.min(simultaneousCount, 10));
+  const N = Math.max(1, Math.min(simultaneousCount, 50));
 
   const entries: Entry[] = useMemo(() =>
     winners
@@ -152,16 +153,17 @@ export default function LotteryAnimation({
 
   if (entries.length === 0) return null;
 
-  // Grid columns: 1→1, 2→2, 3→3, 4→4, 5+→5
-  const cols = Math.min(N, 5);
-  const slotSize: 'lg' | 'md' | 'sm' =
-    N === 1 ? 'lg' : N <= 3 ? 'md' : 'sm';
+  // Grid columns: adaptive by count
+  const cols = N === 1 ? 1 : N <= 2 ? 2 : N <= 4 ? N : N <= 10 ? 5 : N <= 20 ? 6 : N <= 35 ? 8 : 10;
+  const slotSize: 'lg' | 'md' | 'sm' | 'xs' =
+    N === 1 ? 'lg' : N <= 3 ? 'md' : N <= 9 ? 'sm' : 'xs';
+  const containerMaxW = N <= 10 ? 'max-w-2xl' : N <= 25 ? 'max-w-3xl' : 'max-w-4xl';
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 overflow-y-auto"
       style={{ background: 'rgba(0,0,0,0.88)' }}
     >
-      <div className="w-full max-w-2xl flex flex-col items-center gap-4 py-6 px-4 rounded-2xl"
+      <div className={`w-full ${containerMaxW} flex flex-col items-center gap-4 py-6 px-4 rounded-2xl`}
         style={{ background: 'rgba(10,15,28,0.97)', boxShadow: '0 0 80px rgba(0,0,0,0.95), 0 0 0 1px rgba(74,222,128,0.1)' }}
       >
 
