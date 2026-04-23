@@ -196,12 +196,14 @@ export default function WatchPage() {
                     <div className="text-xs space-y-1 max-h-56 overflow-y-auto">
                       <p className="font-medium text-gray-300 mb-2">Победители:</p>
                       {result.winners.map(w => (
-                        <div key={w.wallet} className="flex justify-between gap-2 py-0.5 text-gray-400">
-                          <span className="truncate">{w.wallet}</span>
-                          <span className="shrink-0 text-gray-200">
-                            {w.prizeCount} шт{' '}
-                            <span className="text-gray-500">[{w.winningNumbers.join(', ')}]</span>
-                          </span>
+                        <div key={w.wallet} className="py-0.5">
+                          <div className="flex justify-between gap-2 text-gray-400">
+                            <span className="truncate">{w.wallet}</span>
+                            <span className="shrink-0 text-gray-200">{w.prizeCount} шт</span>
+                          </div>
+                          <div className="text-gray-600 break-all leading-relaxed">
+                            {w.winningNumbers.join(', ')}
+                          </div>
                         </div>
                       ))}
                     </div>
