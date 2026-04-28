@@ -31,8 +31,9 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 1500):
 }
 
 export async function POST(request: NextRequest) {
-  const { text, csvString, filename } = (await request.json()) as {
+  const { text, parseMode, csvString, filename } = (await request.json()) as {
     text: string;
+    parseMode?: 'HTML' | 'MarkdownV2' | 'Markdown';
     csvString?: string;
     filename?: string;
   };
@@ -46,7 +47,9 @@ export async function POST(request: NextRequest) {
   // 1. Text message → group chat
   if (CHAT_ID && text) {
     try {
-      await tgPost('sendMessage', { chat_id: CHAT_ID, text });
+      const payload: Record<string, unknown> = { chat_id: CHAT_ID, text };
+      if (parseMode) payload.parse_mode = parseMode;
+      await tgPost('sendMessage', payload);
     } catch (e) {
       errors.push(`group message: ${e instanceof Error ? e.message : e}`);
     }

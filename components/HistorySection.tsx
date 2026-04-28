@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { RaffleResult } from '@/lib/types';
-import { generateCSV, downloadCSV, makeFilename, formatRaffleText } from '@/lib/csv';
+import { generateCSV, downloadCSV, makeFilename, formatRaffleTextHtml } from '@/lib/csv';
 
 interface Props {
   history: RaffleResult[];
@@ -99,7 +99,8 @@ async function sendOnce(result: RaffleResult): Promise<void> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      text: formatRaffleText(result),
+      text: formatRaffleTextHtml(result),
+      parseMode: 'HTML',
       csvString: generateCSV(result),
       filename: makeFilename(result.prizes),
     }),

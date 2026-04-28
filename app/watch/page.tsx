@@ -224,15 +224,23 @@ export default function WatchPage() {
       </div>
 
       {/* Animation overlay */}
-      {animating && (
-        <LotteryAnimation
-          prizeLabel={animating.prizeLabel}
-          totalTickets={animating.totalTickets}
-          simultaneousCount={animating.simultaneousCount ?? 5}
-          winners={animating.winners}
-          onDone={() => setAnimating(null)}
-        />
-      )}
+      {animating && (() => {
+        const usedSoFar = history.reduce(
+          (s, r) => s + r.winners.reduce((ws, w) => ws + w.winningNumbers.length, 0),
+          0,
+        );
+        const ticketsRemaining = Math.max(0, animating.totalTickets - usedSoFar);
+        return (
+          <LotteryAnimation
+            prizeLabel={animating.prizeLabel}
+            totalTickets={animating.totalTickets}
+            simultaneousCount={animating.simultaneousCount ?? 5}
+            ticketsRemaining={ticketsRemaining}
+            winners={animating.winners}
+            onDone={() => setAnimating(null)}
+          />
+        );
+      })()}
 
       {/* Login modal */}
       {showLogin && (

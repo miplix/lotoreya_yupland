@@ -93,11 +93,12 @@ interface Props {
   totalTickets: number;
   winners: Winner[];
   simultaneousCount: number;
+  ticketsRemaining?: number;
   onDone: () => void;
 }
 
 export default function LotteryAnimation({
-  prizeLabel, totalTickets, winners, simultaneousCount, onDone,
+  prizeLabel, totalTickets, winners, simultaneousCount, ticketsRemaining, onDone,
 }: Props) {
   const N = Math.max(1, Math.min(simultaneousCount, 50));
 
@@ -171,6 +172,14 @@ export default function LotteryAnimation({
         <div className="text-center shrink-0">
           <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-0.5">Розыгрыш</p>
           <h2 className="text-2xl font-bold text-white">{prizeLabel}</h2>
+          <p className="text-xs text-gray-400 mt-1">
+            Всего мест: <span className="text-white font-medium">{totalTickets}</span>
+            {typeof ticketsRemaining === 'number' && (
+              <>
+                {' · '}Осталось: <span className="text-white font-medium">{ticketsRemaining}</span>
+              </>
+            )}
+          </p>
         </div>
 
         {!allDone ? (
