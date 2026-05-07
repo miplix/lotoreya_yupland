@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { NFTQuery, NFTItem } from '@/lib/types';
 import { extractTicketCount } from '@/lib/nft-parser';
 import { getWalletRanges } from '@/lib/lottery';
+import { SuggestionDropdown, type TitleSuggestion } from './SuggestionDropdown';
 
 interface Props {
   queries: NFTQuery[];
@@ -25,7 +26,6 @@ async function sendOverview(queries: NFTQuery[]): Promise<void> {
   });
 }
 
-interface TitleSuggestion { title: string; image: string | null; count: number; }
 interface ScanState {
   lastSkip: number;
   totalSeen: number;
@@ -33,30 +33,42 @@ interface ScanState {
   uniqueTitles: number;
 }
 
+const MAX_SUGGESTIONS = 20;
+
 export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Map<string, string>>(new Map());
   const [copied, setCopied] = useState(false);
-  // IDs of queries that passed the silent 1-sec debounce check (≥1 NFT found)
+  // IDs of queries that passed validation (≥1 NFT in cache or via Sendler fallback)
   const [validated, setValidated] = useState<Set<string>>(new Set());
-  // Autocomplete suggestions per query (sourced from Turso collection_titles)
-  const [suggestions, setSuggestions] = useState<Map<string, TitleSuggestion[]>>(new Map());
+  // Local cache of all collection titles — pulled once, filtered client-side (instant)
+  const [allTitles, setAllTitles] = useState<TitleSuggestion[]>([]);
+  // Which input id is currently showing suggestions; anchor element for portal positioning
   const [activeSuggestionFor, setActiveSuggestionFor] = useState<string | null>(null);
+  const [activeAnchor, setActiveAnchor] = useState<HTMLElement | null>(null);
   // Shared scan state from Turso (same row golden-drop uses)
   const [scanState, setScanState] = useState<ScanState | null>(null);
   const [scanning, setScanning] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const inputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const suggestTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Cleanup timers on unmount
   useEffect(() => () => {
     timers.current.forEach(clearTimeout);
-    suggestTimers.current.forEach(clearTimeout);
   }, []);
 
-  // Load shared scan state on mount
+  // Preload the full title list once — 1797 rows ≈ 150 KB; filter is local after that.
+  const refreshTitleCache = async () => {
+    try {
+      const res = await fetch('/api/nft-titles?limit=2000');
+      const data = await res.json();
+      setAllTitles(data.items ?? []);
+    } catch { /* silent */ }
+  };
+
   useEffect(() => {
+    refreshTitleCache();
     fetch('/api/nft-scan').then(r => r.json()).then(setScanState).catch(() => {});
   }, []);
 
@@ -82,6 +94,7 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
       }
       const fresh = await fetch('/api/nft-scan').then(r => r.json());
       setScanState(fresh);
+      await refreshTitleCache();
     } catch { /* silent */ }
     finally {
       setScanning(false);
@@ -94,48 +107,55 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
   const removeQuery = (id: string) => {
     const t = timers.current.get(id);
     if (t) { clearTimeout(t); timers.current.delete(id); }
-    const st = suggestTimers.current.get(id);
-    if (st) { clearTimeout(st); suggestTimers.current.delete(id); }
     setValidated(prev => { const s = new Set(prev); s.delete(id); return s; });
-    setSuggestions(prev => { const m = new Map(prev); m.delete(id); return m; });
-    if (activeSuggestionFor === id) setActiveSuggestionFor(null);
+    inputRefs.current.delete(id);
+    if (activeSuggestionFor === id) {
+      setActiveSuggestionFor(null);
+      setActiveAnchor(null);
+    }
     onChange(queries.filter(q => q.id !== id));
   };
+
+  // Filter from in-memory cache — instant, runs on every keystroke
+  const suggestionsFor = useMemo(() => {
+    return (raw: string): TitleSuggestion[] => {
+      const q = raw.trim().toLowerCase();
+      if (!q) return [];
+      const out: TitleSuggestion[] = [];
+      for (const t of allTitles) {
+        if (t.title.toLowerCase().includes(q)) {
+          out.push(t);
+          if (out.length >= MAX_SUGGESTIONS) break;
+        }
+      }
+      return out;
+    };
+  }, [allTitles]);
 
   const updateTitle = (id: string, title: string) => {
     onChange(queries.map(q => (q.id === id ? { ...q, searchTitle: title } : q)));
 
-    // Reset checkmark for this field
-    setValidated(prev => { const s = new Set(prev); s.delete(id); return s; });
+    // Instant validation: exact case-insensitive match against the cache
+    const lower = title.trim().toLowerCase();
+    const exact = !!lower && allTitles.some(t => t.title.toLowerCase() === lower);
+    setValidated(prev => {
+      const s = new Set(prev);
+      if (exact) s.add(id); else s.delete(id);
+      return s;
+    });
 
-    // Clear existing timers
-    const existing = timers.current.get(id);
-    if (existing) clearTimeout(existing);
-    const existingSuggest = suggestTimers.current.get(id);
-    if (existingSuggest) clearTimeout(existingSuggest);
-
-    if (!title.trim()) {
-      setSuggestions(prev => { const m = new Map(prev); m.delete(id); return m; });
-      return;
+    if (title.trim()) {
+      const anchor = inputRefs.current.get(id);
+      if (anchor) setActiveAnchor(anchor);
+      setActiveSuggestionFor(id);
+    } else {
+      setActiveSuggestionFor(prev => (prev === id ? null : prev));
     }
 
-    // Fast: pull suggestions from Turso (debounce 200ms) and confirm validation if exact match exists
-    const suggestTimer = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/nft-titles?q=${encodeURIComponent(title.trim())}&limit=10`);
-        const data = await res.json();
-        const items: TitleSuggestion[] = data.items ?? [];
-        setSuggestions(prev => new Map(prev).set(id, items));
-        setActiveSuggestionFor(id);
-        const lower = title.trim().toLowerCase();
-        if (items.some(it => it.title.toLowerCase() === lower)) {
-          setValidated(prev => new Set(prev).add(id));
-        }
-      } catch { /* silent */ }
-    }, 200);
-    suggestTimers.current.set(id, suggestTimer);
-
-    // Slow fallback: live Sendler check after 1s (kept as second-line confirmation)
+    // Slow fallback for titles missing from the cache (e.g. brand-new collections)
+    const existing = timers.current.get(id);
+    if (existing) clearTimeout(existing);
+    if (!title.trim() || exact) return;
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(`/api/search-nft?title=${encodeURIComponent(title.trim())}`);
@@ -152,6 +172,7 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
     onChange(queries.map(q => (q.id === id ? { ...q, searchTitle: suggestion.title } : q)));
     setValidated(prev => new Set(prev).add(id));
     setActiveSuggestionFor(null);
+    setActiveAnchor(null);
   };
 
   const searchAll = async () => {
@@ -234,40 +255,38 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
         <div key={query.id} className="flex items-center gap-2">
           <div className="relative flex-1">
             <input
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              ref={el => { inputRefs.current.set(query.id, el); }}
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:border-blue-500"
               placeholder="Название NFT для поиска"
               value={query.searchTitle}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
               onChange={e => updateTitle(query.id, e.target.value)}
-              onFocus={() => {
-                if ((suggestions.get(query.id) ?? []).length > 0) setActiveSuggestionFor(query.id);
+              onFocus={e => {
+                if (query.searchTitle.trim()) {
+                  setActiveAnchor(e.currentTarget);
+                  setActiveSuggestionFor(query.id);
+                }
               }}
               onBlur={() => setTimeout(() => {
-                setActiveSuggestionFor(prev => (prev === query.id ? null : prev));
+                setActiveSuggestionFor(prev => {
+                  if (prev === query.id) {
+                    setActiveAnchor(null);
+                    return null;
+                  }
+                  return prev;
+                });
               }, 150)}
               onKeyDown={e => {
                 if (e.key === 'Enter') searchAll();
-                if (e.key === 'Escape') setActiveSuggestionFor(null);
+                if (e.key === 'Escape') {
+                  setActiveSuggestionFor(null);
+                  setActiveAnchor(null);
+                }
               }}
             />
-            {activeSuggestionFor === query.id && (suggestions.get(query.id) ?? []).length > 0 && (
-              <ul className="absolute z-20 left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl max-h-72 overflow-y-auto text-sm">
-                {(suggestions.get(query.id) ?? []).map(s => (
-                  <li
-                    key={s.title}
-                    onMouseDown={e => { e.preventDefault(); pickSuggestion(query.id, s); }}
-                    className="flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-gray-700 transition-colors"
-                  >
-                    {s.image ? (
-                      <img src={s.image} alt="" className="w-7 h-7 rounded object-cover shrink-0 bg-gray-900" />
-                    ) : (
-                      <span className="w-7 h-7 rounded bg-gray-900 shrink-0" />
-                    )}
-                    <span className="flex-1 min-w-0 truncate text-gray-100">{s.title}</span>
-                    <span className="shrink-0 text-xs text-gray-400">×{s.count}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
 
           {/* Green checkmark — appears after debounce confirms ≥1 NFT found */}
@@ -290,6 +309,14 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
           )}
         </div>
       ))}
+
+      {activeSuggestionFor && (
+        <SuggestionDropdown
+          anchor={activeAnchor}
+          items={suggestionsFor(queries.find(q => q.id === activeSuggestionFor)?.searchTitle ?? '')}
+          onPick={s => pickSuggestion(activeSuggestionFor, s)}
+        />
+      )}
 
       <button
         className="w-full py-1.5 border border-dashed border-gray-600 hover:border-gray-400 rounded-lg text-xs text-gray-500 hover:text-gray-300 transition-colors"
