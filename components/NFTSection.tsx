@@ -25,16 +25,25 @@ async function sendOverview(queries: NFTQuery[]): Promise<void> {
   });
 }
 
+interface TitleSuggestion { title: string; image: string | null; count: number; }
+
 export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Map<string, string>>(new Map());
   const [copied, setCopied] = useState(false);
   // IDs of queries that passed the silent 1-sec debounce check (≥1 NFT found)
   const [validated, setValidated] = useState<Set<string>>(new Set());
+  // Autocomplete suggestions per query (sourced from Turso collection_titles)
+  const [suggestions, setSuggestions] = useState<Map<string, TitleSuggestion[]>>(new Map());
+  const [activeSuggestionFor, setActiveSuggestionFor] = useState<string | null>(null);
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const suggestTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Cleanup timers on unmount
-  useEffect(() => () => { timers.current.forEach(clearTimeout); }, []);
+  useEffect(() => () => {
+    timers.current.forEach(clearTimeout);
+    suggestTimers.current.forEach(clearTimeout);
+  }, []);
 
   const addQuery = () =>
     onChange([...queries, { id: crypto.randomUUID(), searchTitle: '', nfts: [] }]);
@@ -42,7 +51,11 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
   const removeQuery = (id: string) => {
     const t = timers.current.get(id);
     if (t) { clearTimeout(t); timers.current.delete(id); }
+    const st = suggestTimers.current.get(id);
+    if (st) { clearTimeout(st); suggestTimers.current.delete(id); }
     setValidated(prev => { const s = new Set(prev); s.delete(id); return s; });
+    setSuggestions(prev => { const m = new Map(prev); m.delete(id); return m; });
+    if (activeSuggestionFor === id) setActiveSuggestionFor(null);
     onChange(queries.filter(q => q.id !== id));
   };
 
@@ -52,13 +65,34 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
     // Reset checkmark for this field
     setValidated(prev => { const s = new Set(prev); s.delete(id); return s; });
 
-    // Clear existing debounce timer
+    // Clear existing timers
     const existing = timers.current.get(id);
     if (existing) clearTimeout(existing);
+    const existingSuggest = suggestTimers.current.get(id);
+    if (existingSuggest) clearTimeout(existingSuggest);
 
-    if (!title.trim()) return;
+    if (!title.trim()) {
+      setSuggestions(prev => { const m = new Map(prev); m.delete(id); return m; });
+      return;
+    }
 
-    // Schedule silent check after 1 s
+    // Fast: pull suggestions from Turso (debounce 200ms) and confirm validation if exact match exists
+    const suggestTimer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/nft-titles?q=${encodeURIComponent(title.trim())}&limit=10`);
+        const data = await res.json();
+        const items: TitleSuggestion[] = data.items ?? [];
+        setSuggestions(prev => new Map(prev).set(id, items));
+        setActiveSuggestionFor(id);
+        const lower = title.trim().toLowerCase();
+        if (items.some(it => it.title.toLowerCase() === lower)) {
+          setValidated(prev => new Set(prev).add(id));
+        }
+      } catch { /* silent */ }
+    }, 200);
+    suggestTimers.current.set(id, suggestTimer);
+
+    // Slow fallback: live Sendler check after 1s (kept as second-line confirmation)
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(`/api/search-nft?title=${encodeURIComponent(title.trim())}`);
@@ -68,8 +102,13 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
         }
       } catch { /* silent */ }
     }, 1000);
-
     timers.current.set(id, timer);
+  };
+
+  const pickSuggestion = (id: string, suggestion: TitleSuggestion) => {
+    onChange(queries.map(q => (q.id === id ? { ...q, searchTitle: suggestion.title } : q)));
+    setValidated(prev => new Set(prev).add(id));
+    setActiveSuggestionFor(null);
   };
 
   const searchAll = async () => {
@@ -130,8 +169,36 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
               placeholder="Название NFT для поиска"
               value={query.searchTitle}
               onChange={e => updateTitle(query.id, e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && searchAll()}
+              onFocus={() => {
+                if ((suggestions.get(query.id) ?? []).length > 0) setActiveSuggestionFor(query.id);
+              }}
+              onBlur={() => setTimeout(() => {
+                setActiveSuggestionFor(prev => (prev === query.id ? null : prev));
+              }, 150)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') searchAll();
+                if (e.key === 'Escape') setActiveSuggestionFor(null);
+              }}
             />
+            {activeSuggestionFor === query.id && (suggestions.get(query.id) ?? []).length > 0 && (
+              <ul className="absolute z-20 left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-xl max-h-72 overflow-y-auto text-sm">
+                {(suggestions.get(query.id) ?? []).map(s => (
+                  <li
+                    key={s.title}
+                    onMouseDown={e => { e.preventDefault(); pickSuggestion(query.id, s); }}
+                    className="flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-gray-700 transition-colors"
+                  >
+                    {s.image ? (
+                      <img src={s.image} alt="" className="w-7 h-7 rounded object-cover shrink-0 bg-gray-900" />
+                    ) : (
+                      <span className="w-7 h-7 rounded bg-gray-900 shrink-0" />
+                    )}
+                    <span className="flex-1 min-w-0 truncate text-gray-100">{s.title}</span>
+                    <span className="shrink-0 text-xs text-gray-400">×{s.count}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {/* Green checkmark — appears after debounce confirms ≥1 NFT found */}

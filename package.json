@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.3",
     "@vercel/kv": "^3.0.0",
     "next": "^15",
     "react": "^18",
