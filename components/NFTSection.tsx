@@ -45,7 +45,7 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
   // Shared scan state from Turso (same row golden-drop uses)
   const [scanState, setScanState] = useState<ScanState | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [scanMessage, setScanMessage] = useState<string>('');
+  const [showHelp, setShowHelp] = useState(false);
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const suggestTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -63,9 +63,7 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
   const runScan = async () => {
     if (scanning) return;
     setScanning(true);
-    setScanMessage('Сканирую...');
     try {
-      // Loop until end of collection or 5 batches done — keeps Vercel timeout safe per call
       for (let i = 0; i < 20; i++) {
         const res = await fetch('/api/nft-scan', {
           method: 'POST',
@@ -80,20 +78,12 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
           lastScannedAt: new Date().toISOString(),
           uniqueTitles: prev?.uniqueTitles ?? 0,
         }));
-        setScanMessage(
-          `Прогон ${i + 1}: +${data.itemsThisRun} NFT, обновлено title: ${data.titlesAddedOrUpdated}, всего: ${data.totalSeen}`,
-        );
-        if (data.endOfCollection) {
-          setScanMessage(`Готово. Всего NFT: ${data.totalSeen}.`);
-          break;
-        }
+        if (data.endOfCollection) break;
       }
-      // refresh title count
       const fresh = await fetch('/api/nft-scan').then(r => r.json());
       setScanState(fresh);
-    } catch (e) {
-      setScanMessage(`Ошибка: ${e instanceof Error ? e.message : 'unknown'}`);
-    } finally {
+    } catch { /* silent */ }
+    finally {
       setScanning(false);
     }
   };
@@ -210,35 +200,34 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
         )}
       </div>
 
-      <p className="text-sm font-semibold text-yellow-400 tracking-wide">
-        Начните вводить
-      </p>
-
-      {/* Shared NFT cache control (same scan_state row golden-drop uses in Turso) */}
-      <div className="flex items-center justify-between gap-2 text-xs bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2">
-        <div className="min-w-0 flex-1">
-          <div className="text-gray-300">
-            Кэш NFT: <span className="text-white font-medium">{scanState?.uniqueTitles ?? '—'}</span>{' '}
-            <span className="text-gray-500">видов</span>
-            {' · '}
-            <span className="text-gray-400">{scanState?.totalSeen ?? '—'}</span>{' '}
-            <span className="text-gray-500">шт</span>
-          </div>
-          <div className="text-gray-500 truncate">
-            {scanMessage ||
-              (scanState?.lastScannedAt
-                ? `обновлено ${new Date(scanState.lastScannedAt).toLocaleString('ru-RU')}`
-                : 'ещё не сканировалось')}
-          </div>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-yellow-400 tracking-wide">
+          Начните вводить
+        </p>
+        <div className="flex items-center gap-1.5 shrink-0 relative">
+          <button
+            type="button"
+            onClick={() => setShowHelp(v => !v)}
+            onBlur={() => setTimeout(() => setShowHelp(false), 150)}
+            aria-label="Подсказка"
+            className="text-gray-500 hover:text-gray-200 text-xs w-4 h-4 rounded-full border border-gray-600 flex items-center justify-center transition-colors"
+          >
+            ?
+          </button>
+          {showHelp && (
+            <div className="absolute right-0 top-6 z-30 w-60 text-[11px] leading-relaxed bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-2.5 text-gray-300">
+              Список NFT хранится в общей базе для всех админов. Сканируй только если нужного NFT нет в выпадающем списке — это добавит новые.
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={runScan}
+            disabled={scanning}
+            className="px-2.5 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 rounded-md text-xs transition-colors"
+          >
+            {scanning ? '…' : 'Сканировать'}
+          </button>
         </div>
-        <button
-          onClick={runScan}
-          disabled={scanning}
-          className="shrink-0 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 rounded-lg text-xs transition-colors"
-          title="Подгружает новые NFT с Sendler API в общий кэш (Turso)"
-        >
-          {scanning ? '...' : 'Подгрузить'}
-        </button>
       </div>
 
       {queries.map(query => (
