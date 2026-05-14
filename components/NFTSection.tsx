@@ -10,6 +10,8 @@ interface Props {
   queries: NFTQuery[];
   onChange: (queries: NFTQuery[]) => void;
   onSearchDone: (updatedQueries: NFTQuery[]) => void;
+  /** When false the "search overview" message to Telegram is skipped. */
+  notifyTelegram?: boolean;
 }
 
 async function sendOverview(queries: NFTQuery[]): Promise<void> {
@@ -35,7 +37,7 @@ interface ScanState {
 
 const MAX_SUGGESTIONS = 500;
 
-export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
+export default function NFTSection({ queries, onChange, onSearchDone, notifyTelegram = true }: Props) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Map<string, string>>(new Map());
   const [copied, setCopied] = useState(false);
@@ -204,7 +206,9 @@ export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
     const updated = queries.map((q, i) => ({ ...q, nfts: results[i] }));
     onChange(updated);
     setLoading(false);
-    try { await sendOverview(updated); } catch {}
+    if (notifyTelegram) {
+      try { await sendOverview(updated); } catch {}
+    }
     onSearchDone(updated);
   };
 

@@ -10,6 +10,7 @@ import { AppState, NFTQuery, RaffleResult, Winner, DrawState } from '@/lib/types
 import { loadState, saveState, resetState, exportState, importState } from '@/lib/storage';
 import { runLottery, getTotalTickets } from '@/lib/lottery';
 import { formatRaffleText } from '@/lib/csv';
+import { getNotifyTelegram, setNotifyTelegram } from '@/lib/notifications';
 import { pushLotteryResult, clearLotteryState, pushBgImage } from '@/app/actions/lottery-actions';
 
 interface PrizeForm { name: string; count: number; simultaneousCount: number; }
@@ -117,7 +118,13 @@ export default function Home() {
   const [activePanel, setActivePanel] = useState<'nft' | 'prizes'>('nft');
   const [resultText, setResultText] = useState<string | null>(null);
   const [animData, setAnimData] = useState<AnimData | null>(null);
+  const [notifyTg, setNotifyTg] = useState(true);
   const importRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setNotifyTg(getNotifyTelegram()); }, []);
+  const toggleNotify = () => {
+    setNotifyTg(v => { const next = !v; setNotifyTelegram(next); return next; });
+  };
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -203,11 +210,13 @@ export default function Home() {
     // Show result text in modal
     setResultText(formatRaffleText(result));
 
-    // Send to Telegram
-    setSending(true);
-    try { await doSend(result); }
-    catch (e) { alert(`Розыгрыш сохранён, ошибка TG:\n${e instanceof Error ? e.message : e}`); }
-    finally { setSending(false); }
+    // Send to Telegram (skip if the user disabled auto-notifications)
+    if (notifyTg) {
+      setSending(true);
+      try { await doSend(result); }
+      catch (e) { alert(`Розыгрыш сохранён, ошибка TG:\n${e instanceof Error ? e.message : e}`); }
+      finally { setSending(false); }
+    }
 
     // Push to spectator page (fire and forget)
     const draw: DrawState = {
@@ -272,6 +281,7 @@ export default function Home() {
               queries={state.queries}
               onChange={queries => setState(prev => ({ ...prev, queries }))}
               onSearchDone={handleSearchDone}
+              notifyTelegram={notifyTg}
             />
           </SlidePanel>
 
@@ -295,7 +305,16 @@ export default function Home() {
         </div>
 
         {/* Utility buttons */}
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <label className="flex items-center gap-2 mr-auto select-none cursor-pointer text-sm text-gray-300">
+            <input
+              type="checkbox"
+              checked={!notifyTg}
+              onChange={toggleNotify}
+              className="w-4 h-4 accent-blue-500"
+            />
+            Не отправлять в Telegram
+          </label>
           <button className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors" onClick={() => exportState(state)}>Экспорт</button>
           <button className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors" onClick={() => importRef.current?.click()}>Импорт</button>
           <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
