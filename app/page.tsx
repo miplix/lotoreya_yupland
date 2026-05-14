@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import NFTSection from '@/components/NFTSection';
-import PrizeSection from '@/components/PrizeSection';
+import PrizeSection, { type PrizeForm } from '@/components/PrizeSection';
 import HistorySection, { doSend } from '@/components/HistorySection';
 import ResultModal from '@/components/ResultModal';
 import LotteryAnimation from '@/components/LotteryAnimation';
@@ -14,7 +14,6 @@ import { getNotifyTelegram, setNotifyTelegram } from '@/lib/notifications';
 import { getConnector } from '@/lib/near-connector';
 import { pushLotteryResult, clearLotteryState, pushBgImage } from '@/app/actions/lottery-actions';
 
-interface PrizeForm { name: string; count: number; simultaneousCount: number; }
 interface AnimData {
   prizeLabel: string;
   totalTickets: number;
@@ -112,7 +111,7 @@ function SlidePanel({
 
 export default function Home() {
   const [state, setState] = useState<AppState>({ queries: [], history: [], usedNumbers: [] });
-  const [prize, setPrize] = useState<PrizeForm>({ name: '', count: 1, simultaneousCount: 50 });
+  const [prize, setPrize] = useState<PrizeForm>({ kind: 'nft', name: '', count: 1, simultaneousCount: 50 });
   const [sending, setSending] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -364,6 +363,7 @@ export default function Home() {
               usedNumbers={state.usedNumbers.length}
               onRaffle={handleLottery}
               sending={sending}
+              walletAccount={wallet}
             />
           </SlidePanel>
         </div>
