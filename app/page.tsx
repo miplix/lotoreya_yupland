@@ -11,6 +11,7 @@ import { loadState, saveState, resetState, exportState, importState } from '@/li
 import { runLottery, getTotalTickets } from '@/lib/lottery';
 import { formatRaffleText } from '@/lib/csv';
 import { getNotifyTelegram, setNotifyTelegram } from '@/lib/notifications';
+import { getConnector } from '@/lib/near-connector';
 import { pushLotteryResult, clearLotteryState, pushBgImage } from '@/app/actions/lottery-actions';
 
 interface PrizeForm { name: string; count: number; simultaneousCount: number; }
@@ -119,11 +120,56 @@ export default function Home() {
   const [resultText, setResultText] = useState<string | null>(null);
   const [animData, setAnimData] = useState<AnimData | null>(null);
   const [notifyTg, setNotifyTg] = useState(true);
+  const [wallet, setWallet] = useState<string | null>(null);
+  const [walletBusy, setWalletBusy] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setNotifyTg(getNotifyTelegram()); }, []);
   const toggleNotify = () => {
     setNotifyTg(v => { const next = !v; setNotifyTelegram(next); return next; });
+  };
+
+  // NEAR wallet (singleton connector shared with /watch via lib/near-connector)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const c = await getConnector();
+      if (!c || cancelled) return;
+      const onSignIn = ({ accounts }: { accounts: Array<{ accountId: string }> }) => {
+        const id = accounts[0]?.accountId;
+        if (id) setWallet(id);
+      };
+      const onSignOut = () => setWallet(null);
+      c.on('wallet:signIn', onSignIn);
+      c.on('wallet:signOut', onSignOut);
+      try {
+        const existing = await c.getConnectedWallet();
+        const id = existing?.accounts?.[0]?.accountId;
+        if (id && !cancelled) setWallet(id);
+      } catch { /* not connected yet */ }
+      return () => {
+        c.off('wallet:signIn', onSignIn);
+        c.off('wallet:signOut', onSignOut);
+      };
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const connectWallet = async () => {
+    setWalletBusy(true);
+    try {
+      const c = await getConnector();
+      if (c) await c.connect();
+    } catch { /* user cancelled / popup blocked */ }
+    finally { setWalletBusy(false); }
+  };
+
+  const disconnectWallet = async () => {
+    try {
+      const c = await getConnector();
+      if (c) await c.disconnect();
+    } catch { /* ignore */ }
+    setWallet(null);
   };
 
   useEffect(() => {
@@ -264,7 +310,25 @@ export default function Home() {
               />
               Эфир
             </a>
-            <span className="text-xs text-gray-500">Yupland · {new Date().getFullYear()}</span>
+            {wallet ? (
+              <button
+                onClick={disconnectWallet}
+                title="Отключить кошелёк"
+                className="px-3 py-1.5 bg-gray-700 hover:bg-red-800 rounded-lg text-xs transition-colors flex items-center gap-1.5 max-w-[10rem]"
+              >
+                <span className="truncate">{wallet}</span>
+                <span className="text-gray-400">✕</span>
+              </button>
+            ) : (
+              <button
+                onClick={connectWallet}
+                disabled={walletBusy}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 rounded-lg text-xs transition-colors"
+              >
+                {walletBusy ? 'Подключение…' : 'Подключить кошелёк'}
+              </button>
+            )}
+            <span className="text-xs text-gray-500 hidden sm:inline">Yupland · {new Date().getFullYear()}</span>
           </div>
         </header>
 
