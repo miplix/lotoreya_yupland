@@ -35,6 +35,7 @@ import {
   type WinnerAgg,
 } from '@/lib/payout';
 import { resolveImage } from '@/lib/image';
+import { getNotifyTelegram } from '@/lib/notifications';
 
 interface RewardToken { symbol: string; ftContract: string; decimals: number; sortOrder: number; }
 
@@ -51,7 +52,8 @@ interface Props {
 
 type Stage = 'idle' | 'planning' | 'notifying' | 'signing' | 'reacting' | 'done' | 'error';
 
-interface PhotoRecord { wallet: string; messageId: number | null; }
+interface DeliveryRecord { chatId: string; messageId: number; }
+interface PhotoRecord { wallet: string; deliveries: DeliveryRecord[]; }
 
 export default function PayoutPanel({ result, walletAccount, walletObj, onClose }: Props) {
   // Only the first prize is supported — that matches the current raffle flow.
@@ -117,23 +119,25 @@ export default function PayoutPanel({ result, walletAccount, walletObj, onClose 
 
   const sendPhotos = async (): Promise<PhotoRecord[]> => {
     const records: PhotoRecord[] = [];
-    if (!isToken && holdings?.template) {
-      const photoUrl = resolveImage(holdings.template.media);
-      if (photoUrl) {
-        for (const item of nftPlan?.items ?? []) {
-          const caption = `<code>${escapeHtml(item.wallet)}</code> — ${item.needed} шт · «${escapeHtml(prize.name)}»`;
-          try {
-            const r = await fetch('/api/tg-photo', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ photo: photoUrl, caption }),
-            });
-            const data = await r.json();
-            records.push({ wallet: item.wallet, messageId: r.ok ? data.messageId : null });
-          } catch {
-            records.push({ wallet: item.wallet, messageId: null });
-          }
-        }
+    // Only NFT prizes ship a photo (token has no associated media).
+    if (isToken || !holdings?.template) return records;
+    const photoUrl = resolveImage(holdings.template.media);
+    if (!photoUrl) return records;
+    for (const item of nftPlan?.items ?? []) {
+      const caption = `<code>${escapeHtml(item.wallet)}</code> — ${item.needed} шт · «${escapeHtml(prize.name)}»`;
+      try {
+        const r = await fetch('/api/tg-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ photo: photoUrl, caption }),
+        });
+        const data = await r.json();
+        const deliveries: DeliveryRecord[] = (data.deliveries ?? [])
+          .filter((d: { messageId: number | null }) => typeof d.messageId === 'number')
+          .map((d: { chatId: string; messageId: number }) => ({ chatId: d.chatId, messageId: d.messageId }));
+        records.push({ wallet: item.wallet, deliveries });
+      } catch {
+        records.push({ wallet: item.wallet, deliveries: [] });
       }
     }
     return records;
@@ -146,17 +150,19 @@ export default function PayoutPanel({ result, walletAccount, walletObj, onClose 
         .filter(i => i.transferTokenIds.length > 0 || i.mintCount > 0)
         .map(i => i.wallet),
     );
+    const targets: DeliveryRecord[] = [];
     for (const r of records) {
-      if (!r.messageId) continue;
       if (!succeededWallets.has(r.wallet)) continue;
-      try {
-        await fetch('/api/tg-react', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messageId: r.messageId, emoji: '👍' }),
-        });
-      } catch { /* ignore individual failures */ }
+      targets.push(...r.deliveries);
     }
+    if (targets.length === 0) return;
+    try {
+      await fetch('/api/tg-react', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targets, emoji: '👍' }),
+      });
+    } catch { /* ignore — reactions are best-effort */ }
   };
 
   const doPayout = async () => {
@@ -164,8 +170,10 @@ export default function PayoutPanel({ result, walletAccount, walletObj, onClose 
     setError(null);
     try {
       // 1. Send a photo for each winner (NFT mode only — token mode has no media)
+      // Skip entirely when the operator opted out of Telegram notifications.
+      const tgEnabled = getNotifyTelegram();
       setStage('notifying');
-      const photoRecords = await sendPhotos();
+      const photoRecords = tgEnabled ? await sendPhotos() : [];
 
       // 2. Build NEAR actions
       setStage('signing');
@@ -218,9 +226,11 @@ export default function PayoutPanel({ result, walletAccount, walletObj, onClose 
         transactions: txs.map(t => ({ receiverId: t.receiverId, actions: t.actions })),
       });
 
-      // 3. Place 👍 on photos for successfully on-chain wallets
-      setStage('reacting');
-      await placeReactions(photoRecords);
+      // 3. Place 👍 on photos for successfully on-chain wallets (only if we sent any)
+      if (photoRecords.length > 0) {
+        setStage('reacting');
+        await placeReactions(photoRecords);
+      }
 
       setStage('done');
     } catch (e) {
