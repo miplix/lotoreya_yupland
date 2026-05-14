@@ -25,9 +25,10 @@ export default function WatchPage() {
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
-  // NEAR wallet connect (client-only; just shows the connected accountId)
+  // NEAR wallet — read-only on /watch: shows the accountId if the operator
+  // already connected on the main page. The connect button itself lives on
+  // the main page only (per user request).
   const [wallet, setWallet] = useState<string | null>(null);
-  const [walletBusy, setWalletBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,15 +54,6 @@ export default function WatchPage() {
     })();
     return () => { cancelled = true; };
   }, []);
-
-  const connectWallet = async () => {
-    setWalletBusy(true);
-    try {
-      const c = await getConnector();
-      if (c) await c.connect();
-    } catch { /* user cancelled or popup blocked */ }
-    finally { setWalletBusy(false); }
-  };
 
   const disconnectWallet = async () => {
     try {
@@ -398,21 +390,6 @@ export default function WatchPage() {
                 ✕
               </button>
             </div>
-
-            <div className="flex items-center gap-2 text-[11px] text-gray-500">
-              <span className="flex-1 h-px bg-gray-700" />
-              или
-              <span className="flex-1 h-px bg-gray-700" />
-            </div>
-
-            <button
-              type="button"
-              onClick={async () => { setShowLogin(false); await connectWallet(); }}
-              disabled={walletBusy}
-              className="w-full py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 rounded-lg text-sm font-medium transition-colors"
-            >
-              {walletBusy ? 'Подключение...' : 'Подключить кошелёк'}
-            </button>
           </form>
         </div>
       )}

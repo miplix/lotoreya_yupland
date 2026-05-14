@@ -6,10 +6,14 @@ import type { Winner, Prize } from './types';
 import { resolveImage } from './image';
 
 export const SIGNER_WALLET = 'darai_collection.near';
-export const NFT_CONTRACT = 'yuplandshop.mintbase1.near';
+export const MINTBASE_CONTRACT = 'yuplandshop.mintbase1.near'; // only this collection accepts our nft_batch_mint
 
 const ROYALTY_PERCENT = 500; // 5% in basis points (Mintbase convention)
 const MINT_DEPOSIT_PER = 9_870_000_000_000_000_000_000n; // yocto per mint
+// Mint actions take the full single-TX budget (280 TGas) — overpaying gas is
+// safe (NEAR refunds the unused portion) and prevents "exceeded prepaid gas"
+// failures observed on busy mints.
+const MINT_GAS = '280000000000000'; // 280 TGas
 const TRANSFER_GAS = '200000000000000'; // 200 TGas
 const TX_GAS_BUDGET = 280_000_000_000_000; // hard cap per NEAR TX
 const STORAGE_DEPOSIT_AMOUNT = '1250000000000000000000'; // 0.00125 NEAR
@@ -73,44 +77,67 @@ interface PlanNftArgs {
   prize: Prize;
   winners: WinnerAgg[];
   signerHoldings: string[]; // token_ids of SIGNER_WALLET for the prize title
-  mintable: boolean;        // false when the title doesn't belong to NFT_CONTRACT
+  contract: string;         // resolved by /api/sendler-holdings (could be foreign)
+  mintable: boolean;        // true only when contract === MINTBASE_CONTRACT
 }
 
 export interface NftPayoutPlan {
   prize: Prize;
+  contract: string;
   items: NftPlanItem[];
   totalTransfer: number;
   totalMint: number;
-  unmintableShortfall: number; // winners that can't be served on-chain (no holdings, not mintable)
+  /** True when contract is foreign AND holdings can't cover total need.
+   * In that case we DON'T do any on-chain action — only ship a CSV to admins. */
+  externalShortage: boolean;
+  totalNeeded: number;
+  totalHoldings: number;
   mintable: boolean;
 }
 
-export function planNftPayout({ prize, winners, signerHoldings, mintable }: PlanNftArgs): NftPayoutPlan {
+export function planNftPayout({ prize, winners, signerHoldings, contract, mintable }: PlanNftArgs): NftPayoutPlan {
   const pool = [...signerHoldings];
+  const totalNeeded = winners.reduce((s, w) => s + w.count, 0);
+  const totalHoldings = signerHoldings.length;
+
+  // Foreign collection + not enough on hand → bail out: no on-chain at all.
+  const externalShortage = !mintable && totalHoldings < totalNeeded;
+  if (externalShortage) {
+    return {
+      prize,
+      contract,
+      items: winners.map(w => ({ wallet: w.wallet, needed: w.count, transferTokenIds: [], mintCount: 0 })),
+      totalTransfer: 0,
+      totalMint: 0,
+      externalShortage: true,
+      totalNeeded,
+      totalHoldings,
+      mintable,
+    };
+  }
+
   let totalTransfer = 0;
   let totalMint = 0;
-  let unmintableShortfall = 0;
   const items: NftPlanItem[] = [];
 
   for (const w of winners) {
     const take = Math.min(w.count, pool.length);
     const transferTokenIds = pool.splice(0, take);
     const remainder = w.count - transferTokenIds.length;
+    // mint is allowed only on our own Mintbase collection; for any foreign
+    // collection we treat the remainder as 0 (we've already returned early
+    // for the shortage case above).
     const mintCount = mintable ? remainder : 0;
-    if (!mintable) unmintableShortfall += remainder;
     totalTransfer += transferTokenIds.length;
     totalMint += mintCount;
     items.push({ wallet: w.wallet, needed: w.count, transferTokenIds, mintCount });
   }
-  return { prize, items, totalTransfer, totalMint, unmintableShortfall, mintable };
+  return { prize, contract, items, totalTransfer, totalMint, externalShortage: false, totalNeeded, totalHoldings, mintable };
 }
 
 export function buildNftMintAction(template: NftTemplate, ownerId: string, num: number): NearAction {
   // Mintbase returns the unused storage; 5% overpay is the convention.
   const deposit = ((MINT_DEPOSIT_PER * BigInt(num) * 105n) / 100n).toString();
-  // Gas budget: 50 TGas base + 2 TGas per mint, clamped to [100, 280].
-  const gasN = Math.min(280, Math.max(100, 50 + 2 * num)) * 1e12;
-  const gas = BigInt(Math.round(gasN)).toString();
   return {
     type: 'FunctionCall',
     params: {
@@ -130,7 +157,7 @@ export function buildNftMintAction(template: NftTemplate, ownerId: string, num: 
         },
         split_owners: null,
       },
-      gas,
+      gas: MINT_GAS,
       deposit,
     },
   };
