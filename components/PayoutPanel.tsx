@@ -34,7 +34,6 @@ import {
   type FtPayoutPlan,
   type WinnerAgg,
 } from '@/lib/payout';
-import { resolveImage } from '@/lib/image';
 import { getNotifyTelegram } from '@/lib/notifications';
 
 interface RewardToken { symbol: string; ftContract: string; decimals: number; sortOrder: number; }
@@ -117,19 +116,20 @@ export default function PayoutPanel({ result, walletAccount, walletObj, onClose 
     return () => { cancelled = true; };
   }, [aggregated, prize, isToken]);
 
-  const sendPhotos = async (): Promise<PhotoRecord[]> => {
+  const sendAdminMessages = async (): Promise<PhotoRecord[]> => {
+    // Send one private text per winner to every admin. Plain text keeps the
+    // chat readable; the 👍 lands on these messages after the on-chain TX.
     const records: PhotoRecord[] = [];
-    // Only NFT prizes ship a photo (token has no associated media).
-    if (isToken || !holdings?.template) return records;
-    const photoUrl = resolveImage(holdings.template.media);
-    if (!photoUrl) return records;
-    for (const item of nftPlan?.items ?? []) {
-      const caption = `<code>${escapeHtml(item.wallet)}</code> — ${item.needed} шт · «${escapeHtml(prize.name)}»`;
+    const items = isToken ? (ftPlan?.items ?? []) : (nftPlan?.items ?? []);
+    for (const item of items) {
+      const text = isToken
+        ? `<code>${escapeHtml(item.wallet)}</code> — ${(prize.tokenAmount ?? 0) * (aggregated.find(a => a.wallet === item.wallet)?.count ?? 0)} ${escapeHtml(prize.name)}`
+        : `<code>${escapeHtml(item.wallet)}</code> — ${(item as { needed: number }).needed} шт · «${escapeHtml(prize.name)}»`;
       try {
-        const r = await fetch('/api/tg-photo', {
+        const r = await fetch('/api/tg-admin-msg', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ photo: photoUrl, caption }),
+          body: JSON.stringify({ text }),
         });
         const data = await r.json();
         const deliveries: DeliveryRecord[] = (data.deliveries ?? [])
@@ -144,12 +144,20 @@ export default function PayoutPanel({ result, walletAccount, walletObj, onClose 
   };
 
   const placeReactions = async (records: PhotoRecord[]) => {
-    if (!nftPlan || !nftPlan.mintable) return; // no 👍 for non-mintable prizes
-    const succeededWallets = new Set(
-      nftPlan.items
-        .filter(i => i.transferTokenIds.length > 0 || i.mintCount > 0)
-        .map(i => i.wallet),
-    );
+    // 👍 goes on every message whose wallet actually received a payout.
+    // For NFT prizes from outside our collection we leave the message
+    // unreacted to make the "couldn't mint" case visible at a glance.
+    let succeededWallets: Set<string>;
+    if (isToken) {
+      succeededWallets = new Set((ftPlan?.items ?? []).map(i => i.wallet));
+    } else {
+      if (!nftPlan || !nftPlan.mintable) return;
+      succeededWallets = new Set(
+        nftPlan.items
+          .filter(i => i.transferTokenIds.length > 0 || i.mintCount > 0)
+          .map(i => i.wallet),
+      );
+    }
     const targets: DeliveryRecord[] = [];
     for (const r of records) {
       if (!succeededWallets.has(r.wallet)) continue;
@@ -169,11 +177,11 @@ export default function PayoutPanel({ result, walletAccount, walletObj, onClose 
     if (!walletObj) { setError('Кошелёк не подключён'); setStage('error'); return; }
     setError(null);
     try {
-      // 1. Send a photo for each winner (NFT mode only — token mode has no media)
+      // 1. Send a private text message to each admin for every winner.
       // Skip entirely when the operator opted out of Telegram notifications.
       const tgEnabled = getNotifyTelegram();
       setStage('notifying');
-      const photoRecords = tgEnabled ? await sendPhotos() : [];
+      const photoRecords = tgEnabled ? await sendAdminMessages() : [];
 
       // 2. Build NEAR actions
       setStage('signing');
@@ -309,7 +317,7 @@ export default function PayoutPanel({ result, walletAccount, walletObj, onClose 
             className="flex-1 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 rounded-lg text-sm font-medium transition-colors"
           >
             {stage === 'planning' && 'Готовлю план...'}
-            {stage === 'notifying' && 'Шлю фото в TG...'}
+            {stage === 'notifying' && 'Шлю админам в TG...'}
             {stage === 'signing' && 'Подпиши в кошельке...'}
             {stage === 'reacting' && 'Ставлю 👍...'}
             {stage === 'done' && '✓ Выдано'}
