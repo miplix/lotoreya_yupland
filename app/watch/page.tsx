@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { DrawState, RaffleResult, ServerState } from '@/lib/types';
 import { generateCSV, downloadCSV, makeFilename } from '@/lib/csv';
 import LotteryAnimation from '@/components/LotteryAnimation';
+import { getConnector } from '@/lib/near-connector';
 
 function shortAddr(addr: string) {
   return addr.length > 25 ? `${addr.slice(0, 8)}…${addr.slice(-8)}` : addr;
@@ -23,6 +24,52 @@ export default function WatchPage() {
   const [keyInput, setKeyInput] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+
+  // NEAR wallet connect (client-only; just shows the connected accountId)
+  const [wallet, setWallet] = useState<string | null>(null);
+  const [walletBusy, setWalletBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const c = await getConnector();
+      if (!c || cancelled) return;
+      const onSignIn = ({ accounts }: { accounts: Array<{ accountId: string }> }) => {
+        const id = accounts[0]?.accountId;
+        if (id) setWallet(id);
+      };
+      const onSignOut = () => setWallet(null);
+      c.on('wallet:signIn', onSignIn);
+      c.on('wallet:signOut', onSignOut);
+      try {
+        const existing = await c.getConnectedWallet();
+        const id = existing?.accounts?.[0]?.accountId;
+        if (id && !cancelled) setWallet(id);
+      } catch { /* not connected yet */ }
+      return () => {
+        c.off('wallet:signIn', onSignIn);
+        c.off('wallet:signOut', onSignOut);
+      };
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const connectWallet = async () => {
+    setWalletBusy(true);
+    try {
+      const c = await getConnector();
+      if (c) await c.connect();
+    } catch { /* user cancelled or popup blocked */ }
+    finally { setWalletBusy(false); }
+  };
+
+  const disconnectWallet = async () => {
+    try {
+      const c = await getConnector();
+      if (c) await c.disconnect();
+    } catch { /* ignore */ }
+    setWallet(null);
+  };
 
   // Background music — on by default; the browser still blocks audio
   // until the user taps anywhere on the page, so we register a one-time
@@ -156,12 +203,23 @@ export default function WatchPage() {
               {musicOn ? '🔊' : '🔈'}
             </button>
             <span className="text-xs text-gray-500 hidden sm:inline">Yupland · {new Date().getFullYear()}</span>
-            <button
-              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs transition-colors"
-              onClick={() => { setShowLogin(true); setKeyInput(''); setLoginError(''); }}
-            >
-              Войти
-            </button>
+            {wallet ? (
+              <button
+                onClick={disconnectWallet}
+                title="Отключить кошелёк"
+                className="px-3 py-1.5 bg-gray-700 hover:bg-red-800 rounded-lg text-xs transition-colors flex items-center gap-1.5 max-w-[10rem]"
+              >
+                <span className="truncate">{wallet}</span>
+                <span className="text-gray-400">✕</span>
+              </button>
+            ) : (
+              <button
+                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs transition-colors"
+                onClick={() => { setShowLogin(true); setKeyInput(''); setLoginError(''); }}
+              >
+                Войти
+              </button>
+            )}
           </div>
         </header>
 
@@ -340,6 +398,21 @@ export default function WatchPage() {
                 ✕
               </button>
             </div>
+
+            <div className="flex items-center gap-2 text-[11px] text-gray-500">
+              <span className="flex-1 h-px bg-gray-700" />
+              или
+              <span className="flex-1 h-px bg-gray-700" />
+            </div>
+
+            <button
+              type="button"
+              onClick={async () => { setShowLogin(false); await connectWallet(); }}
+              disabled={walletBusy}
+              className="w-full py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 rounded-lg text-sm font-medium transition-colors"
+            >
+              {walletBusy ? 'Подключение...' : 'Подключить кошелёк'}
+            </button>
           </form>
         </div>
       )}
