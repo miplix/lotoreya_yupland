@@ -24,28 +24,45 @@ export default function WatchPage() {
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
-  // Background music
+  // Background music — on by default; the browser still blocks audio
+  // until the user taps anywhere on the page, so we register a one-time
+  // pointerdown listener to kick it off on first interaction.
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [musicOn, setMusicOn] = useState(false);
+  const [musicOn, setMusicOn] = useState(true);
 
   const lastDrawId = useRef<string | null | undefined>(undefined);
 
-  // Restore last music preference (browsers still need a tap before audio.play())
+  // Restore last user choice (only the explicit "off" survives — default is on)
   useEffect(() => {
-    const saved = typeof window !== 'undefined' && window.localStorage.getItem('watch-music-on');
-    if (saved === 'true') setMusicOn(true);
+    if (typeof window === 'undefined') return;
+    const saved = window.localStorage.getItem('watch-music-on');
+    if (saved === 'false') setMusicOn(false);
   }, []);
 
-  // Apply play/pause whenever the toggle changes
+  // Apply play/pause whenever the toggle changes; ignore autoplay rejections,
+  // the kick-off listener below will retry after the first user gesture.
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
     if (musicOn) {
-      el.play().catch(() => setMusicOn(false));
+      el.play().catch(() => { /* user-gesture required; will resume on next tap */ });
     } else {
       el.pause();
     }
     try { window.localStorage.setItem('watch-music-on', String(musicOn)); } catch { /* ignore */ }
+  }, [musicOn]);
+
+  // First user gesture → resume audio if the toggle is still on but the
+  // <audio> element was blocked by the autoplay policy.
+  useEffect(() => {
+    const kick = () => {
+      const el = audioRef.current;
+      if (el && musicOn && el.paused) {
+        el.play().catch(() => { /* ignore */ });
+      }
+    };
+    window.addEventListener('pointerdown', kick, { once: true });
+    return () => window.removeEventListener('pointerdown', kick);
   }, [musicOn]);
 
   useEffect(() => {
