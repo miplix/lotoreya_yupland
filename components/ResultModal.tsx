@@ -3,9 +3,10 @@
 interface Props {
   text: string;
   onClose: () => void;
+  onPayout?: () => void; // shown only when provided (operator with collection signer)
 }
 
-export default function ResultModal({ text, onClose }: Props) {
+export default function ResultModal({ text, onClose, onPayout }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
@@ -27,9 +28,17 @@ export default function ResultModal({ text, onClose }: Props) {
         <pre className="flex-1 overflow-y-auto p-5 text-sm text-gray-200 whitespace-pre-wrap font-mono leading-relaxed">
           {text}
         </pre>
-        <div className="px-5 py-3 border-t border-gray-700">
+        <div className="px-5 py-3 border-t border-gray-700 flex gap-2">
+          {onPayout && (
+            <button
+              className="flex-1 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium transition-colors"
+              onClick={onPayout}
+            >
+              Выдать призы
+            </button>
+          )}
           <button
-            className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
+            className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
             onClick={onClose}
           >
             Закрыть

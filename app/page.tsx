@@ -6,6 +6,8 @@ import PrizeSection, { type PrizeForm } from '@/components/PrizeSection';
 import HistorySection, { doSend } from '@/components/HistorySection';
 import ResultModal from '@/components/ResultModal';
 import LotteryAnimation from '@/components/LotteryAnimation';
+import PayoutPanel from '@/components/PayoutPanel';
+import { SIGNER_WALLET } from '@/lib/payout';
 import { AppState, NFTQuery, RaffleResult, Winner, DrawState } from '@/lib/types';
 import { loadState, saveState, resetState, exportState, importState } from '@/lib/storage';
 import { runLottery, getTotalTickets } from '@/lib/lottery';
@@ -117,9 +119,13 @@ export default function Home() {
   const [isMobile, setIsMobile] = useState(false);
   const [activePanel, setActivePanel] = useState<'nft' | 'prizes'>('nft');
   const [resultText, setResultText] = useState<string | null>(null);
+  const [payoutResult, setPayoutResult] = useState<RaffleResult | null>(null);
   const [animData, setAnimData] = useState<AnimData | null>(null);
   const [notifyTg, setNotifyTg] = useState(true);
   const [wallet, setWallet] = useState<string | null>(null);
+  const [walletObj, setWalletObj] = useState<{
+    signAndSendTransactions: (args: { transactions: Array<{ receiverId: string; actions: unknown[] }> }) => Promise<unknown>;
+  } | null>(null);
   const [walletBusy, setWalletBusy] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
@@ -134,18 +140,32 @@ export default function Home() {
     (async () => {
       const c = await getConnector();
       if (!c || cancelled) return;
+      const refresh = async () => {
+        try {
+          const existing = await c.getConnectedWallet();
+          const id = existing?.accounts?.[0]?.accountId;
+          if (cancelled) return;
+          if (id) {
+            setWallet(id);
+            // `getConnectedWallet` returns { wallet, accounts }; the signing
+            // surface lives on `.wallet` (it implements signAndSendTransactions).
+            setWalletObj((existing.wallet as unknown) as typeof walletObj extends infer T ? T : never);
+          } else {
+            setWallet(null);
+            setWalletObj(null);
+          }
+        } catch { /* ignore */ }
+      };
       const onSignIn = ({ accounts }: { accounts: Array<{ accountId: string }> }) => {
         const id = accounts[0]?.accountId;
         if (id) setWallet(id);
+        // Pick up the wallet object so we can call signAndSendTransactions.
+        refresh();
       };
-      const onSignOut = () => setWallet(null);
+      const onSignOut = () => { setWallet(null); setWalletObj(null); };
       c.on('wallet:signIn', onSignIn);
       c.on('wallet:signOut', onSignOut);
-      try {
-        const existing = await c.getConnectedWallet();
-        const id = existing?.accounts?.[0]?.accountId;
-        if (id && !cancelled) setWallet(id);
-      } catch { /* not connected yet */ }
+      await refresh();
       return () => {
         c.off('wallet:signIn', onSignIn);
         c.off('wallet:signOut', onSignOut);
@@ -233,7 +253,13 @@ export default function Home() {
     if (!prize.name.trim()) { alert('Введите название приза'); return; }
     if (available <= 0) { alert('Все билеты разыграны. Нажмите «Сбросить всё».'); return; }
 
-    const prizeObj = { id: crypto.randomUUID(), name: prize.name.trim(), count: prize.count };
+    const prizeObj = {
+      id: crypto.randomUUID(),
+      name: prize.name.trim(),
+      count: prize.count,
+      kind: prize.kind,
+      tokenAmount: prize.kind === 'token' ? prize.tokenAmount : undefined,
+    };
     const { result, capped, newUsedNumbers } = runLottery(state.queries, prizeObj, state.usedNumbers);
 
     if (capped) {
@@ -252,8 +278,10 @@ export default function Home() {
     const { result, prizeLabel, newHistory } = animData;
     setAnimData(null);
 
-    // Show result text in modal
+    // Show result text in modal + remember the result so the operator can
+    // open the payout panel right after the modal.
     setResultText(formatRaffleText(result));
+    setPayoutResult(result);
 
     // Send to Telegram (skip if the user disabled auto-notifications)
     if (notifyTg) {
@@ -388,7 +416,26 @@ export default function Home() {
         <HistorySection history={state.history} />
       </div>
 
-      {resultText && <ResultModal text={resultText} onClose={() => setResultText(null)} />}
+      {resultText && (
+        <ResultModal
+          text={resultText}
+          onClose={() => setResultText(null)}
+          onPayout={
+            wallet === SIGNER_WALLET && payoutResult
+              ? () => { setResultText(null); /* keep payoutResult to open PayoutPanel */ }
+              : undefined
+          }
+        />
+      )}
+
+      {payoutResult && !resultText && wallet === SIGNER_WALLET && (
+        <PayoutPanel
+          result={payoutResult}
+          walletAccount={wallet}
+          walletObj={walletObj}
+          onClose={() => setPayoutResult(null)}
+        />
+      )}
 
       {animData && (
         <LotteryAnimation

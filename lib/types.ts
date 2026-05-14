@@ -12,10 +12,14 @@ export interface NFTQuery {
   nfts: NFTItem[];
 }
 
+export type PrizeKind = 'nft' | 'token';
+
 export interface Prize {
   id: string;
-  name: string;
-  count: number;
+  name: string;            // NFT title OR FT symbol
+  count: number;           // number of winning slots
+  kind?: PrizeKind;        // defaults to 'nft' when unspecified (legacy results)
+  tokenAmount?: number;    // per-winner amount (only when kind === 'token')
 }
 
 export interface Winner {
