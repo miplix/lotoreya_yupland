@@ -33,7 +33,7 @@ interface ScanState {
   uniqueTitles: number;
 }
 
-const MAX_SUGGESTIONS = 20;
+const MAX_SUGGESTIONS = 500;
 
 export default function NFTSection({ queries, onChange, onSearchDone }: Props) {
   const [loading, setLoading] = useState(false);

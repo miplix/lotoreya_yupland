@@ -73,8 +73,13 @@ export function SuggestionDropdown({ anchor, items, onPick }: Props) {
         width: coords.width,
         maxHeight: coords.maxHeight,
         zIndex: 1000,
+        WebkitOverflowScrolling: 'touch',
+        overscrollBehavior: 'contain',
       }}
       className="bg-gray-800 border border-gray-600 rounded-lg shadow-xl overflow-y-auto text-sm"
+      // onMouseDown on the container fires before input blur — keep the
+      // suggestion open while the tap travels down to a child <li>.
+      onMouseDown={e => e.preventDefault()}
     >
       {items.map(s => {
         const src = resolveImage(s.image);
@@ -82,8 +87,9 @@ export function SuggestionDropdown({ anchor, items, onPick }: Props) {
           <li
             key={s.title}
             role="option"
-            onMouseDown={e => { e.preventDefault(); onPick(s); }}
-            onTouchStart={e => { e.preventDefault(); onPick(s); }}
+            // Use click (works on touch + mouse). Don't preventDefault on
+            // touchstart — that kills the scroll gesture on mobile.
+            onClick={() => onPick(s)}
             className="flex items-center gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-gray-700 active:bg-gray-700 transition-colors border-b border-gray-700/60 last:border-0"
           >
             {src ? (
