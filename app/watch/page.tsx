@@ -24,7 +24,29 @@ export default function WatchPage() {
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
+  // Background music
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [musicOn, setMusicOn] = useState(false);
+
   const lastDrawId = useRef<string | null | undefined>(undefined);
+
+  // Restore last music preference (browsers still need a tap before audio.play())
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' && window.localStorage.getItem('watch-music-on');
+    if (saved === 'true') setMusicOn(true);
+  }, []);
+
+  // Apply play/pause whenever the toggle changes
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (musicOn) {
+      el.play().catch(() => setMusicOn(false));
+    } else {
+      el.pause();
+    }
+    try { window.localStorage.setItem('watch-music-on', String(musicOn)); } catch { /* ignore */ }
+  }, [musicOn]);
 
   useEffect(() => {
     const poll = async () => {
@@ -107,7 +129,16 @@ export default function WatchPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-500">Yupland · {new Date().getFullYear()}</span>
+            <button
+              type="button"
+              onClick={() => setMusicOn(v => !v)}
+              aria-label={musicOn ? 'Выключить музыку' : 'Включить музыку'}
+              title={musicOn ? 'Выключить музыку' : 'Включить музыку'}
+              className="w-8 h-8 flex items-center justify-center bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
+            >
+              {musicOn ? '🔊' : '🔈'}
+            </button>
+            <span className="text-xs text-gray-500 hidden sm:inline">Yupland · {new Date().getFullYear()}</span>
             <button
               className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs transition-colors"
               onClick={() => { setShowLogin(true); setKeyInput(''); setLoginError(''); }}
@@ -116,6 +147,10 @@ export default function WatchPage() {
             </button>
           </div>
         </header>
+
+        {/* Background music — kicks in only after the first user tap */}
+        <audio ref={audioRef} src="/baraban_sg.mp3" loop preload="auto" />
+
 
         {/* KV not configured warning */}
         {kvMissing && (
