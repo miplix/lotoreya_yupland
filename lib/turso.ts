@@ -17,9 +17,14 @@ declare global {
 function sb(): SB {
   if (global.__supabase) return global.__supabase;
   const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Можно использовать service_role (обходит RLS) или anon (нужны RLS-политики).
+  // На лотерее живёт anon — golden-drop держит service_role у себя.
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_ANON_KEY;
   if (!url || !key) {
-    throw new Error('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not set');
+    throw new Error(
+      'SUPABASE_URL / (SUPABASE_SERVICE_ROLE_KEY | SUPABASE_ANON_KEY) not set',
+    );
   }
   global.__supabase = createClient<any, 'yuplink'>(url, key, { // eslint-disable-line @typescript-eslint/no-explicit-any
     db: { schema: 'yuplink' },
