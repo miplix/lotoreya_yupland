@@ -150,7 +150,8 @@ export default function WatchPage() {
         body: JSON.stringify({ key: keyInput }),
       });
       if (res.ok) {
-        window.location.href = '/';
+        // basePath '/lotoreya' не применяется к window.location — префиксим вручную.
+        window.location.href = '/lotoreya';
       } else {
         const data = await res.json();
         setLoginError(data.error ?? 'Неверный ключ');
