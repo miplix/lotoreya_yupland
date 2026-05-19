@@ -21,7 +21,7 @@ async function sendOverview(queries: NFTQuery[]): Promise<void> {
   for (const { wallet, tickets, start, end } of ranges) {
     lines.push(`${wallet} — ${tickets} билетов (${start}–${end})`);
   }
-  await fetch('/api/send-to-telegram', {
+  await fetch('/lotoreya/api/send-to-telegram', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text: lines.join('\n') }),
@@ -63,7 +63,7 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
   // Preload the full title list once — 1797 rows ≈ 150 KB; filter is local after that.
   const refreshTitleCache = async () => {
     try {
-      const res = await fetch('/api/nft-titles?limit=2000');
+      const res = await fetch('/lotoreya/api/nft-titles?limit=2000');
       const data = await res.json();
       setAllTitles(data.items ?? []);
     } catch { /* silent */ }
@@ -71,7 +71,7 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
 
   useEffect(() => {
     refreshTitleCache();
-    fetch('/api/nft-scan').then(r => r.json()).then(setScanState).catch(() => {});
+    fetch('/lotoreya/api/nft-scan').then(r => r.json()).then(setScanState).catch(() => {});
   }, []);
 
   const runScan = async () => {
@@ -79,7 +79,7 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
     setScanning(true);
     try {
       for (let i = 0; i < 20; i++) {
-        const res = await fetch('/api/nft-scan', {
+        const res = await fetch('/lotoreya/api/nft-scan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pages: 5, resume: true }),
@@ -94,7 +94,7 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
         }));
         if (data.endOfCollection) break;
       }
-      const fresh = await fetch('/api/nft-scan').then(r => r.json());
+      const fresh = await fetch('/lotoreya/api/nft-scan').then(r => r.json());
       setScanState(fresh);
       await refreshTitleCache();
     } catch { /* silent */ }
@@ -160,7 +160,7 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
     if (!title.trim() || exact) return;
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/search-nft?title=${encodeURIComponent(title.trim())}`);
+        const res = await fetch(`/lotoreya/api/search-nft?title=${encodeURIComponent(title.trim())}`);
         const data = await res.json();
         if ((data.items ?? []).length > 0) {
           setValidated(prev => new Set(prev).add(id));
@@ -186,7 +186,7 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
       queries.map(async (q): Promise<NFTItem[]> => {
         if (!q.searchTitle.trim()) return q.nfts;
         try {
-          const res = await fetch(`/api/search-nft?title=${encodeURIComponent(q.searchTitle)}`);
+          const res = await fetch(`/lotoreya/api/search-nft?title=${encodeURIComponent(q.searchTitle)}`);
           if (!res.ok) throw new Error();
           const data = await res.json();
           return (data.items ?? []).map((item: Record<string, string>) => ({

@@ -107,7 +107,7 @@ export default function WatchPage() {
   useEffect(() => {
     const poll = async () => {
       try {
-        const res = await fetch('/api/lottery-state');
+        const res = await fetch('/lotoreya/api/lottery-state');
         if (!res.ok) return;
         const data: ServerState & { _kvConfigured?: boolean } = await res.json();
 
@@ -144,7 +144,7 @@ export default function WatchPage() {
     setLoginLoading(true);
     setLoginError('');
     try {
-      const res = await fetch('/api/auth', {
+      const res = await fetch('/lotoreya/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: keyInput }),

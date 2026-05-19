@@ -95,7 +95,7 @@ export default function HistorySection({ history }: Props) {
 }
 
 async function sendOnce(result: RaffleResult): Promise<void> {
-  const res = await fetch('/api/send-to-telegram', {
+  const res = await fetch('/lotoreya/api/send-to-telegram', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

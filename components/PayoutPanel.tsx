@@ -112,7 +112,7 @@ export default function PayoutPanel({ result, walletAccount, walletObj, onClose 
       setError(null);
       try {
         if (isToken) {
-          const r = await fetch('/api/reward-tokens');
+          const r = await fetch('/lotoreya/api/reward-tokens');
           const data = await r.json();
           const tk: RewardToken | undefined = (data.items ?? []).find(
             (t: RewardToken) => t.symbol === prize.name,
@@ -158,7 +158,7 @@ export default function PayoutPanel({ result, walletAccount, walletObj, onClose 
       ? `Раздача токенов: <b>${escapeHtml(prize.name)}</b> · победителей: ${aggregated.length}`
       : `Раздача NFT: <b>${escapeHtml(prize.name)}</b> · победителей: ${aggregated.length}`;
     try {
-      const r = await fetch('/api/tg-admin-msg', {
+      const r = await fetch('/lotoreya/api/tg-admin-msg', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: caption, csvString: csv, filename }),
@@ -175,7 +175,7 @@ export default function PayoutPanel({ result, walletAccount, walletObj, onClose 
   const placeReactions = async (targets: DeliveryRecord[]) => {
     if (targets.length === 0) return;
     try {
-      await fetch('/api/tg-react', {
+      await fetch('/lotoreya/api/tg-react', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ targets, emoji: '👍' }),

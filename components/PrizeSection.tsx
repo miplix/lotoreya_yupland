@@ -54,8 +54,8 @@ export default function PrizeSection({
   const isSigner = walletAccount === COLLECTION_SIGNER;
 
   useEffect(() => {
-    fetch('/api/nft-titles?limit=2000').then(r => r.json()).then(d => setAllTitles(d.items ?? [])).catch(() => {});
-    fetch('/api/reward-tokens').then(r => r.json()).then(d => setTokens(d.items ?? [])).catch(() => {});
+    fetch('/lotoreya/api/nft-titles?limit=2000').then(r => r.json()).then(d => setAllTitles(d.items ?? [])).catch(() => {});
+    fetch('/lotoreya/api/reward-tokens').then(r => r.json()).then(d => setTokens(d.items ?? [])).catch(() => {});
   }, []);
 
   // Force NFT mode (without amount) when token features are not allowed
