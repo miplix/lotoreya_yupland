@@ -7,7 +7,10 @@ const CSV_RECIPIENTS = (process.env.CSV_RECIPIENT_IDS ?? '')
   .map(s => s.trim())
   .filter(Boolean);
 
-async function tgPost(method: string, body: FormData | Record<string, unknown>) {
+async function tgPost(
+  method: string,
+  body: FormData | Record<string, unknown>,
+): Promise<{ message_id?: number }> {
   const isForm = body instanceof FormData;
   const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
     method: 'POST',
@@ -16,6 +19,11 @@ async function tgPost(method: string, body: FormData | Record<string, unknown>) 
       : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   });
   if (!res.ok) throw new Error(await res.text());
+  const json = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    result?: { message_id?: number };
+  };
+  return json.result ?? {};
 }
 
 async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 1500): Promise<T> {
@@ -43,6 +51,9 @@ export async function POST(request: NextRequest) {
   }
 
   const errors: string[] = [];
+  // deliveries — per-recipient (chatId, messageId) для CSV, чтобы потом
+  // PayoutPanel мог поставить 👍 на эту же сообщение, а не слать второй файл.
+  const deliveries: Array<{ chatId: string; messageId: number }> = [];
 
   // 1. Text message → group chat
   if (CHAT_ID && text) {
@@ -59,12 +70,15 @@ export async function POST(request: NextRequest) {
   if (csvString && filename) {
     for (const userId of CSV_RECIPIENTS) {
       try {
-        await withRetry(async () => {
+        const result = await withRetry(async () => {
           const form = new FormData();
           form.append('chat_id', userId);
           form.append('document', new Blob([csvString], { type: 'text/csv' }), filename);
-          await tgPost('sendDocument', form);
+          return await tgPost('sendDocument', form);
         });
+        if (typeof result.message_id === 'number') {
+          deliveries.push({ chatId: userId, messageId: result.message_id });
+        }
       } catch (e) {
         errors.push(`CSV to ${userId}: ${e instanceof Error ? e.message : e}`);
       }
@@ -73,8 +87,8 @@ export async function POST(request: NextRequest) {
 
   if (errors.length) {
     console.error('Telegram errors:', errors);
-    return NextResponse.json({ errors }, { status: 500 });
+    return NextResponse.json({ errors, deliveries }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, deliveries });
 }

@@ -94,7 +94,9 @@ export default function HistorySection({ history }: Props) {
   );
 }
 
-async function sendOnce(result: RaffleResult): Promise<void> {
+export type CsvDelivery = { chatId: string; messageId: number };
+
+async function sendOnce(result: RaffleResult): Promise<CsvDelivery[]> {
   const res = await fetch('/lotoreya/api/send-to-telegram', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -110,9 +112,11 @@ async function sendOnce(result: RaffleResult): Promise<void> {
     const msg = Array.isArray(err.errors) ? err.errors.join('\n') : (err.error ?? 'Unknown error');
     throw new Error(msg);
   }
+  const data = (await res.json().catch(() => ({}))) as { deliveries?: CsvDelivery[] };
+  return data.deliveries ?? [];
 }
 
-export async function doSend(result: RaffleResult, attempts = 3): Promise<void> {
+export async function doSend(result: RaffleResult, attempts = 3): Promise<CsvDelivery[]> {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try { return await sendOnce(result); }

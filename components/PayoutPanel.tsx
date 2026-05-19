@@ -56,6 +56,9 @@ interface Props {
   walletObj: {
     signAndSendTransactions: (args: { transactions: Array<{ receiverId: string; actions: unknown[] }> }) => Promise<unknown>;
   } | null;
+  /** CSV-сообщения, отправленные автоматически после розыгрыша. На них
+   *  ставится 👍 после успешной on-chain выплаты — второй файл не шлётся. */
+  csvDeliveries?: Array<{ chatId: string; messageId: number }>;
   onClose: () => void;
 }
 
@@ -89,7 +92,7 @@ function csvFilename(prize: Prize): string {
   return `${prize.kind === 'token' ? 'tokens_' : 'winners_'}${safe || 'prize'}_${Date.now()}.csv`;
 }
 
-export default function PayoutPanel({ result, walletAccount, walletObj, onClose }: Props) {
+export default function PayoutPanel({ result, walletAccount, walletObj, csvDeliveries, onClose }: Props) {
   // Only the first prize is supported — that matches the current raffle flow.
   const prize: Prize = result.prizes[0];
   const aggregated: WinnerAgg[] = useMemo(() => aggregateWinners(result.winners), [result.winners]);
@@ -187,10 +190,13 @@ export default function PayoutPanel({ result, walletAccount, walletObj, onClose 
     if (!walletObj) { setError('Кошелёк не подключён'); setStage('error'); return; }
     setError(null);
     try {
-      // 1. Notify admins privately (one CSV each)
-      const tgEnabled = getNotifyTelegram();
-      setStage('notifying');
-      const deliveries: DeliveryRecord[] = tgEnabled ? await sendAdminCsv() : [];
+      // 1. CSV уже автоматически отправлен сразу после розыгрыша
+      //    (см. page.tsx::handleAnimationDone). Берём messageId'ы оттуда
+      //    и реагируем на ТЕ ЖЕ сообщения — второй файл не шлём.
+      const deliveries: DeliveryRecord[] = (csvDeliveries ?? []).map((d) => ({
+        chatId: d.chatId,
+        messageId: d.messageId,
+      }));
 
       // 2. On-chain payout
       setStage('signing');

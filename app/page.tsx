@@ -120,6 +120,11 @@ export default function Home() {
   const [activePanel, setActivePanel] = useState<'nft' | 'prizes'>('nft');
   const [resultText, setResultText] = useState<string | null>(null);
   const [payoutResult, setPayoutResult] = useState<RaffleResult | null>(null);
+  // deliveries — chatId+messageId CSV-сообщений из первой автоотправки;
+  // PayoutPanel ставит 👍 на них вместо отправки второго файла.
+  const [csvDeliveries, setCsvDeliveries] = useState<
+    Array<{ chatId: string; messageId: number }>
+  >([]);
   const [animData, setAnimData] = useState<AnimData | null>(null);
   const [notifyTg, setNotifyTg] = useState(true);
   const [wallet, setWallet] = useState<string | null>(null);
@@ -282,11 +287,17 @@ export default function Home() {
     // open the payout panel right after the modal.
     setResultText(formatRaffleText(result));
     setPayoutResult(result);
+    setCsvDeliveries([]);
 
     // Send to Telegram (skip if the user disabled auto-notifications)
     if (notifyTg) {
       setSending(true);
-      try { await doSend(result); }
+      try {
+        const deliveries = await doSend(result);
+        // Сохраняем messageId автоотправленного CSV — PayoutPanel ставит на
+        // него 👍 после on-chain выплаты вместо отправки второго файла.
+        setCsvDeliveries(deliveries);
+      }
       catch (e) { alert(`Розыгрыш сохранён, ошибка TG:\n${e instanceof Error ? e.message : e}`); }
       finally { setSending(false); }
     }
@@ -433,6 +444,7 @@ export default function Home() {
           result={payoutResult}
           walletAccount={wallet}
           walletObj={walletObj}
+          csvDeliveries={csvDeliveries}
           onClose={() => setPayoutResult(null)}
         />
       )}
