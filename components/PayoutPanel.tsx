@@ -130,7 +130,7 @@ export default function PayoutPanel({ result, walletAccount, walletObj, csvDeliv
           // No `contract` parameter — let Sendler tell us which collection
           // this title actually lives in (so we detect foreign collections).
           const r = await fetch(
-            `/api/sendler-holdings?owner=${encodeURIComponent(SIGNER_WALLET)}&title=${encodeURIComponent(prize.name)}`,
+            `/lotoreya/api/sendler-holdings?owner=${encodeURIComponent(SIGNER_WALLET)}&title=${encodeURIComponent(prize.name)}`,
           );
           if (!r.ok) throw new Error(`Sendler ${r.status}`);
           const data = (await r.json()) as Holdings;

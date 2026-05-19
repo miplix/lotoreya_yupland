@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Returns NFTs that `owner` holds with the given exact `title`. If `contract`
-// is passed we narrow to that collection; otherwise we look across all of
-// `owner`'s NFTs and return the contract the matching tokens belong to.
+// Возвращает NFT, которые owner реально держит с заданным title.
 //
-// Used by the payout planner to (1) decide transfer vs mint, and (2) detect
-// "foreign collection" titles (e.g. yupai.nfts.tg) — those are transfer-only.
+// КРИТИЧНО: Sendler endpoint `/nft/?title=...&owner_id=...` ИГНОРИРУЕТ
+// owner_id когда задан title — отдаёт ВСЕХ владельцев с этим title.
+// Это приводило к 404 на минте и попыткам transfer чужих токенов.
+//
+// Правильный паттерн (как в sendler-alchemy-balances/lib/sendler.js):
+//   1. /nft/by-owner-contract/?owner_id=...&contract_address=... — все
+//      NFT этого owner'а в коллекции (с пагинацией)
+//   2. фильтруем в JS по title (case-insensitive exact match)
+//   3. /nft/?contract_address=...&title=...&limit=1 — образец для
+//      метаданных (если у нас нет ни одного экземпляра)
 
-const SENDLER_BASE = 'https://api.sendler.xyz/nft/';
+const SENDLER_BASE = 'https://api.sendler.xyz';
 const MINTBASE_CONTRACT = 'yuplandshop.mintbase1.near';
+const PAGE_SIZE = 200;
+const MAX_PAGES = 50; // 10 000 NFT — больше чем содержит darai_collection
 
 interface SendlerItem {
   token_id: string;
@@ -20,11 +28,65 @@ interface SendlerItem {
   nft_contract_id?: string;
 }
 
+async function fetchJson(url: string, apiKey: string): Promise<unknown> {
+  const res = await fetch(url, {
+    headers: { 'X-API-Key': apiKey, accept: 'application/json' },
+    next: { revalidate: 0 },
+  });
+  if (!res.ok) throw new Error(`Sendler HTTP ${res.status}: ${url.slice(0, 120)}`);
+  return res.json();
+}
+
+// Постранично достаём всё что owner держит в контракте.
+async function fetchAllByOwnerContract(
+  apiKey: string,
+  ownerId: string,
+  contract: string,
+): Promise<SendlerItem[]> {
+  const out: SendlerItem[] = [];
+  for (let i = 0; i < MAX_PAGES; i++) {
+    const qs = new URLSearchParams({
+      owner_id: ownerId,
+      contract_address: contract,
+      skip: String(i * PAGE_SIZE),
+      limit: String(PAGE_SIZE),
+    });
+    const data = (await fetchJson(
+      `${SENDLER_BASE}/nft/by-owner-contract/?${qs}`,
+      apiKey,
+    )) as { items?: SendlerItem[] } | SendlerItem[];
+    const items = Array.isArray(data) ? data : data.items ?? [];
+    if (items.length === 0) break;
+    out.push(...items);
+    if (items.length < PAGE_SIZE) break;
+  }
+  return out;
+}
+
+// Один экземпляр по title — для шаблона метаданных при минте.
+async function fetchTemplateByTitle(
+  apiKey: string,
+  contract: string,
+  title: string,
+): Promise<SendlerItem | null> {
+  const qs = new URLSearchParams({
+    contract_address: contract,
+    title,
+    limit: '1',
+  });
+  const data = (await fetchJson(
+    `${SENDLER_BASE}/nft/?${qs}`,
+    apiKey,
+  )) as { items?: SendlerItem[] };
+  const items = data.items ?? [];
+  return items[0] ?? null;
+}
+
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const owner = params.get('owner');
   const title = params.get('title');
-  const contract = params.get('contract') ?? '';
+  const contractParam = params.get('contract') ?? '';
   if (!owner || !title) {
     return NextResponse.json({ error: 'owner & title required' }, { status: 400 });
   }
@@ -34,43 +96,50 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const url = new URL(SENDLER_BASE);
-    if (contract) url.searchParams.set('contract_address', contract);
-    url.searchParams.set('owner_id', owner);
-    url.searchParams.set('title', title);
-    url.searchParams.set('skip', '0');
-    url.searchParams.set('limit', '5000');
-    const res = await fetch(url.toString(), {
-      headers: { accept: 'application/json', 'X-API-Key': apiKey },
-      next: { revalidate: 0 },
-    });
-    if (!res.ok) {
-      return NextResponse.json({ error: `Sendler ${res.status}` }, { status: res.status });
-    }
-    const json = (await res.json()) as { items?: SendlerItem[] };
-    const all = (json.items ?? []).filter(i => !!i.token_id);
-    // Sendler's title parameter is fuzzy — keep only exact case-insensitive matches.
+    // Если контракт не задан — пробуем найти title в нашей основной коллекции.
+    const contract = contractParam || MINTBASE_CONTRACT;
     const targetLower = title.toLowerCase();
-    const matched = all.filter(i => (i.title ?? '').toLowerCase() === targetLower);
-    // Resolve contract: prefer the one the matched tokens belong to.
-    const detectedContract = matched[0]?.nft_contract_id ?? contract ?? '';
-    const sample = matched[0] ?? null;
+
+    // 1. Все NFT owner'а в этом контракте (надёжно — owner_id уважается).
+    const ownerNfts = await fetchAllByOwnerContract(apiKey, owner, contract);
+    const matched = ownerNfts.filter(
+      (i) => (i.title ?? '').toLowerCase() === targetLower,
+    );
+
+    // 2. Шаблон метаданных. Если у нас уже есть совпадение — берём оттуда,
+    //    иначе ищем любой экземпляр в коллекции (нужно для минта).
+    let template: SendlerItem | null = matched[0] ?? null;
+    if (!template) {
+      template = await fetchTemplateByTitle(apiKey, contract, title);
+    }
+
+    // 3. Резолвим контракт: если совпадение найдено — берём контракт из items
+    //    (на случай если title живёт в другом контракте). Иначе оставляем
+    //    запрошенный (или дефолтный mintbase).
+    const detectedContract =
+      matched[0]?.nft_contract_id ?? template?.nft_contract_id ?? contract;
+
     return NextResponse.json({
       contract: detectedContract,
-      mintable: detectedContract === MINTBASE_CONTRACT, // only this collection accepts nft_batch_mint from us
+      // Минтить можем только в наш собственный коллекшен на Mintbase.
+      mintable: detectedContract === MINTBASE_CONTRACT,
       title,
       owner,
-      tokenIds: matched.map(i => String(i.token_id)),
-      template: sample
+      // Только tokenId'ы, реально принадлежащие owner'у — никаких чужих.
+      tokenIds: matched.map((i) => String(i.token_id)),
+      template: template
         ? {
-            title: sample.title ?? title,
-            description: sample.description ?? '',
-            media: sample.media ?? '',
-            reputation: Number(sample.reputation ?? 0),
+            title: template.title ?? title,
+            description: template.description ?? '',
+            media: template.media ?? '',
+            reputation: Number(template.reputation ?? 0),
           }
         : null,
     });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Unknown' }, { status: 500 });
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Unknown' },
+      { status: 500 },
+    );
   }
 }
