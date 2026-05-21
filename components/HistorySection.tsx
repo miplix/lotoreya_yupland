@@ -2,7 +2,13 @@
 
 import { useState } from 'react';
 import { RaffleResult } from '@/lib/types';
-import { generateCSV, downloadCSV, makeFilename, formatRaffleTextHtml } from '@/lib/csv';
+import {
+  generateCSV,
+  downloadCSV,
+  makeFilename,
+  formatRaffleTextHtml,
+  formatCsvCaptionHtml,
+} from '@/lib/csv';
 
 interface Props {
   history: RaffleResult[];
@@ -105,6 +111,9 @@ async function sendOnce(result: RaffleResult): Promise<CsvDelivery[]> {
       parseMode: 'HTML',
       csvString: generateCSV(result),
       filename: makeFilename(result.prizes),
+      // Подпись к CSV-документу в личке — короткое "что разыграно".
+      // Для токенов содержит per-winner amount × кол-во победителей.
+      csvCaption: formatCsvCaptionHtml(result),
     }),
   });
   if (!res.ok) {

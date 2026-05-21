@@ -39,11 +39,14 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 1500):
 }
 
 export async function POST(request: NextRequest) {
-  const { text, parseMode, csvString, filename } = (await request.json()) as {
+  const { text, parseMode, csvString, filename, csvCaption } = (await request.json()) as {
     text: string;
     parseMode?: 'HTML' | 'MarkdownV2' | 'Markdown';
     csvString?: string;
     filename?: string;
+    // Короткая подпись (заголовок) для CSV-документа в личных чатах.
+    // Telegram caption-лимит 1024 символа, parse_mode=HTML.
+    csvCaption?: string;
   };
 
   if (!BOT_TOKEN) {
@@ -68,12 +71,19 @@ export async function POST(request: NextRequest) {
 
   // 2. CSV document → each private recipient (only if CSV provided), with retry
   if (csvString && filename) {
+    // Caption обрезаем до лимита Telegram (1024). Парс-мод HTML чтобы
+    // суммы выделялись жирным.
+    const captionSafe = csvCaption ? csvCaption.slice(0, 1024) : undefined;
     for (const userId of CSV_RECIPIENTS) {
       try {
         const result = await withRetry(async () => {
           const form = new FormData();
           form.append('chat_id', userId);
           form.append('document', new Blob([csvString], { type: 'text/csv' }), filename);
+          if (captionSafe) {
+            form.append('caption', captionSafe);
+            form.append('parse_mode', 'HTML');
+          }
           return await tgPost('sendDocument', form);
         });
         if (typeof result.message_id === 'number') {
