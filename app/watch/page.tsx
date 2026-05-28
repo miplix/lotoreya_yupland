@@ -55,6 +55,38 @@ export default function WatchPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // Авто-вход админа. Если ключ уже сохранён на этом устройстве — молча
+  // обновляем серверную сессию (куки через прокси /lotoreya не всегда
+  // доживают до следующего визита) и сразу уходим в админку. Так пароль
+  // вводится ОДИН раз, а не каждый заход. sessionStorage-флаг защищает от
+  // цикла редиректов, если кука почему-то не ставится вообще.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let saved: string | null = null;
+    try { saved = window.localStorage.getItem('lotoreya-admin-key'); } catch { /* ignore */ }
+    if (!saved) return;
+    setKeyInput(saved); // префилл на случай ручного входа
+    try {
+      if (window.sessionStorage.getItem('lotoreya-auto-login') === '1') return;
+      window.sessionStorage.setItem('lotoreya-auto-login', '1');
+    } catch { /* ignore */ }
+    (async () => {
+      try {
+        const res = await fetch('/lotoreya/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: saved }),
+        });
+        if (res.ok) {
+          window.location.href = '/lotoreya';
+        } else if (res.status === 401) {
+          // Ключ устарел — забываем, чтобы не пытаться снова.
+          try { window.localStorage.removeItem('lotoreya-admin-key'); } catch { /* ignore */ }
+        }
+      } catch { /* оффлайн — оставляем как есть */ }
+    })();
+  }, []);
+
   const disconnectWallet = async () => {
     try {
       const c = await getConnector();
@@ -150,6 +182,9 @@ export default function WatchPage() {
         body: JSON.stringify({ key: keyInput }),
       });
       if (res.ok) {
+        // Запоминаем ключ на устройстве админа — чтобы дальше входить
+        // автоматически, без повторного ввода пароля (см. авто-вход ниже).
+        try { window.localStorage.setItem('lotoreya-admin-key', keyInput); } catch { /* ignore */ }
         // basePath '/lotoreya' не применяется к window.location — префиксим вручную.
         window.location.href = '/lotoreya';
       } else {
