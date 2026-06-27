@@ -14,6 +14,7 @@ import { runLottery, getTotalTickets } from '@/lib/lottery';
 import { formatRaffleText } from '@/lib/csv';
 import { getNotifyTelegram, setNotifyTelegram } from '@/lib/notifications';
 import { getConnector } from '@/lib/near-connector';
+import { getYupLinkWallet } from '@/lib/yuplink-wallet';
 import { pushLotteryResult, clearLotteryState, pushBgImage } from '@/app/actions/lottery-actions';
 
 interface AnimData {
@@ -188,12 +189,21 @@ export default function Home() {
     finally { setWalletBusy(false); }
   };
 
+  // Подключение через НАШ кош: аккаунт-оператор известен, подпись выплат идёт
+  // через попап service.yupland.io/wallet/sign (оператор подтверждает в YupLink).
+  const connectYupLink = () => {
+    const yl = getYupLinkWallet();
+    setWallet(yl.accountId);
+    setWalletObj(yl.walletObj);
+  };
+
   const disconnectWallet = async () => {
     try {
       const c = await getConnector();
       if (c) await c.disconnect();
     } catch { /* ignore */ }
     setWallet(null);
+    setWalletObj(null);
   };
 
   useEffect(() => {
@@ -358,13 +368,22 @@ export default function Home() {
                 <span className="text-gray-400">✕</span>
               </button>
             ) : (
-              <button
-                onClick={connectWallet}
-                disabled={walletBusy}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 rounded-lg text-xs transition-colors"
-              >
-                {walletBusy ? 'Подключение…' : 'Подключить кошелёк'}
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={connectWallet}
+                  disabled={walletBusy}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 rounded-lg text-xs transition-colors"
+                >
+                  {walletBusy ? 'Подключение…' : 'Подключить кошелёк'}
+                </button>
+                <button
+                  onClick={connectYupLink}
+                  title="Подписывать через YupLink-кошелёк"
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-medium rounded-lg text-xs transition-colors"
+                >
+                  YupLink
+                </button>
+              </div>
             )}
             <span className="text-xs text-gray-500 hidden sm:inline">Yupland · {new Date().getFullYear()}</span>
           </div>
