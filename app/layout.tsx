@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru">
+    <html lang="ru" suppressHydrationWarning>
       <head>
         {/* Telegram WebApp SDK — нужен для CloudStorage (стабильное хранение
             админ-ключа в мини-аппе, чтобы пароль вводился один раз). В обычном

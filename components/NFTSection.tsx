@@ -35,7 +35,7 @@ interface ScanState {
   uniqueTitles: number;
 }
 
-const MAX_SUGGESTIONS = 500;
+const MAX_SUGGESTIONS = 50;
 
 export default function NFTSection({ queries, onChange, onSearchDone, notifyTelegram = true }: Props) {
   const [loading, setLoading] = useState(false);
@@ -226,7 +226,7 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
 
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-semibold text-yellow-400 tracking-wide">
-          Начните вводить
+          Выберите NFT из списка или введите название
         </p>
         <div className="flex items-center gap-1.5 shrink-0 relative">
           <button
