@@ -45,6 +45,11 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
   const [validated, setValidated] = useState<Set<string>>(new Set());
   // Local cache of all collection titles — pulled once, filtered client-side (instant)
   const [allTitles, setAllTitles] = useState<TitleSuggestion[]>([]);
+  // Живой поиск (on-chain/Sendler через /api/search-nft) — для NFT, которых нет в
+  // кэше collection_titles (другой контракт / не сканировалась). Чтобы в дропдауне
+  // находилось ВСЁ, что реально существует, а не только закэшированные титулы.
+  const [liveSuggestions, setLiveSuggestions] = useState<{ query: string; items: TitleSuggestion[] }>({ query: '', items: [] });
+  const [liveSearchingFor, setLiveSearchingFor] = useState<string | null>(null);
   // Which input id is currently showing suggestions; anchor element for portal positioning
   const [activeSuggestionFor, setActiveSuggestionFor] = useState<string | null>(null);
   const [activeAnchor, setActiveAnchor] = useState<HTMLElement | null>(null);
@@ -159,19 +164,34 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
     if (anchor) setActiveAnchor(anchor);
     setActiveSuggestionFor(id);
 
-    // Slow fallback for titles missing from the cache (e.g. brand-new collections)
+    // Живой поиск, когда в кэше нет совпадений (NFT с другого контракта или ещё
+    // не сканировалась): /api/search-nft ищет по блокчейну и кладёт результат
+    // прямо в дропдаун — так находится ВСЁ, что реально существует, а не только
+    // закэшированные титулы.
     const existing = timers.current.get(id);
     if (existing) clearTimeout(existing);
-    if (!title.trim() || exact) return;
+    const t = title.trim();
+    const cachedHas = !!lower && allTitles.some(x => x.title.toLowerCase().includes(lower));
+    if (!t || cachedHas) { setLiveSearchingFor(null); return; }
+    setLiveSearchingFor(t);
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/lotoreya/api/search-nft?title=${encodeURIComponent(title.trim())}`);
+        const res = await fetch(`/lotoreya/api/search-nft?title=${encodeURIComponent(t)}`);
         const data = await res.json();
-        if ((data.items ?? []).length > 0) {
-          setValidated(prev => new Set(prev).add(id));
+        const rows = (data.items ?? []) as Array<{ title?: string; media?: string }>;
+        const byTitle = new Map<string, TitleSuggestion>();
+        for (const it of rows) {
+          if (!it.title) continue;
+          const cur = byTitle.get(it.title);
+          if (cur) cur.count++;
+          else byTitle.set(it.title, { title: it.title, image: it.media ?? null, count: 1 });
         }
+        const items = [...byTitle.values()];
+        if (items.length) setValidated(prev => new Set(prev).add(id));
+        setLiveSuggestions({ query: t, items });
       } catch { /* silent */ }
-    }, 1000);
+      finally { setLiveSearchingFor(prev => (prev === t ? null : prev)); }
+    }, 500);
     timers.current.set(id, timer);
   };
 
@@ -321,14 +341,20 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
 
       {activeSuggestionFor && (() => {
         const q = queries.find(qq => qq.id === activeSuggestionFor)?.searchTitle ?? '';
-        const items = suggestionsFor(q);
-        // Дропдаун показываем ВСЕГДА при фокусе: список, либо «загрузка», либо
-        // «ничего не найдено» — чтобы поле всегда реагировало, а не выглядело сломанным.
+        const qTrim = q.trim();
+        const cached = suggestionsFor(q);
+        // Нет в кэше — подмешиваем живой поиск по блокчейну (тот же запрос).
+        const live = (qTrim && liveSuggestions.query === qTrim) ? liveSuggestions.items : [];
+        const items = cached.length ? cached : live;
+        const searching = !!qTrim && liveSearchingFor === qTrim;
+        // Дропдаун показываем ВСЕГДА при фокусе: список, поиск, либо «ничего не найдено».
         const emptyText = items.length
           ? undefined
           : allTitles.length === 0
             ? 'Загрузка списка NFT…'
-            : 'Ничего не найдено — очистите поле, чтобы листать список';
+            : searching
+              ? 'Ищу на блокчейне…'
+              : 'Ничего не найдено — очистите поле, чтобы листать список';
         return (
           <SuggestionDropdown
             anchor={activeAnchor}
