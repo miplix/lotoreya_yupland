@@ -145,32 +145,63 @@ class CompatClient {
           scanned_at: new Date().toISOString(),
         });
       }
-      // ON CONFLICT-логика "count += excluded.count" не выражается одним upsert,
-      // поэтому делаем select+merge+upsert вручную.
-      const ids = rows.map((r) => r.id);
+      // ВАЖНО: на таблице есть case-insensitive уникальный констрейнт
+      // (collection_titles_unique по (contract_id, lower(title))). id скан строит
+      // из сырого title, поэтому два титула-варианта регистра (или новый титул,
+      // совпадающий по lower с существующим под другим id) ломали ВЕСЬ батч
+      // (duplicate key) и свежие NFT не попадали в БД. Поэтому:
+      //  1) дедуп батча по lower(title),
+      //  2) матчим существующие строки по lower(title) и берём их РЕАЛЬНЫЙ id,
+      //  3) существующие — UPDATE (count += ) по их id, новые — INSERT.
+      const contract = rows[0]?.contract_id ?? '';
+      const byKey = new Map<string, { title: string; image: string; count: number }>();
+      for (const r of rows) {
+        const k = r.title.toLowerCase();
+        const cur = byKey.get(k);
+        if (cur) {
+          cur.count += r.count;
+          if ((!cur.image || !cur.image.trim()) && r.image) cur.image = r.image;
+        } else {
+          byKey.set(k, { title: r.title, image: r.image, count: r.count });
+        }
+      }
       const { data: existing, error: selErr } = await sb()
         .from('collection_titles')
-        .select('id, count, image')
-        .in('id', ids);
+        .select('id, title, count, image')
+        .eq('contract_id', contract)
+        .limit(100000);
       if (selErr) throw new Error(`Supabase: ${selErr.message}`);
-      const existingMap = new Map<string, { count: number; image: string | null }>();
-      for (const r of (existing ?? []) as Array<{ id: string; count: number; image: string | null }>) {
-        existingMap.set(r.id, { count: r.count, image: r.image });
+      const exByLower = new Map<string, { id: string; count: number; image: string | null }>();
+      for (const e of (existing ?? []) as Array<{ id: string; title: string; count: number; image: string | null }>) {
+        exByLower.set((e.title ?? '').toLowerCase(), { id: e.id, count: e.count, image: e.image });
       }
-      const merged = rows.map((r) => {
-        const prev = existingMap.get(r.id);
-        return {
-          ...r,
-          count: (prev?.count ?? 0) + r.count,
-          // image: оставляем старое, если оно непустое, иначе берём новое.
-          image: prev?.image && prev.image.trim().length > 0 ? prev.image : r.image,
-        };
-      });
-      const { error: upErr } = await sb()
-        .from('collection_titles')
-        .upsert(merged, { onConflict: 'id' });
-      if (upErr) throw new Error(`Supabase: ${upErr.message}`);
-      return { rows: [], rowsAffected: merged.length };
+      const now = new Date().toISOString();
+      const updates: Array<Record<string, unknown>> = [];
+      const inserts: Array<Record<string, unknown>> = [];
+      for (const [k, b] of byKey) {
+        const ex = exByLower.get(k);
+        if (ex) {
+          updates.push({
+            id: ex.id, contract_id: contract, title: b.title,
+            image: ex.image && ex.image.trim().length > 0 ? ex.image : b.image,
+            count: ex.count + b.count, scanned_at: now,
+          });
+        } else {
+          inserts.push({
+            id: `${contract}:${b.title}`, contract_id: contract, title: b.title,
+            image: b.image || '', count: b.count, scanned_at: now,
+          });
+        }
+      }
+      if (updates.length) {
+        const { error } = await sb().from('collection_titles').upsert(updates, { onConflict: 'id' });
+        if (error) throw new Error(`Supabase upd: ${error.message}`);
+      }
+      if (inserts.length) {
+        const { error } = await sb().from('collection_titles').insert(inserts);
+        if (error) throw new Error(`Supabase ins: ${error.message}`);
+      }
+      return { rows: [], rowsAffected: updates.length + inserts.length };
     }
 
     // 7. UPDATE scan_state SET last_skip = ?, total_seen = ?, last_scanned_at = ? WHERE contract_id = ?
