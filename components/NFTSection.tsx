@@ -122,7 +122,9 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
   const suggestionsFor = useMemo(() => {
     return (raw: string): TitleSuggestion[] => {
       const q = raw.trim().toLowerCase();
-      if (!q) return [];
+      // Пустое поле — показываем топ тайтлов (отсортированы по count), чтобы
+      // можно было ПРОСМАТРИВАТЬ и выбирать, а не угадывать название.
+      if (!q) return allTitles.slice(0, MAX_SUGGESTIONS);
       const out: TitleSuggestion[] = [];
       for (const t of allTitles) {
         if (t.title.toLowerCase().includes(q)) {
@@ -146,13 +148,10 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
       return s;
     });
 
-    if (title.trim()) {
-      const anchor = inputRefs.current.get(id);
-      if (anchor) setActiveAnchor(anchor);
-      setActiveSuggestionFor(id);
-    } else {
-      setActiveSuggestionFor(prev => (prev === id ? null : prev));
-    }
+    // Держим список открытым и при наборе, и при очистке (пустое = топ-список).
+    const anchor = inputRefs.current.get(id);
+    if (anchor) setActiveAnchor(anchor);
+    setActiveSuggestionFor(id);
 
     // Slow fallback for titles missing from the cache (e.g. brand-new collections)
     const existing = timers.current.get(id);
@@ -269,10 +268,10 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
               spellCheck={false}
               onChange={e => updateTitle(query.id, e.target.value)}
               onFocus={e => {
-                if (query.searchTitle.trim()) {
-                  setActiveAnchor(e.currentTarget);
-                  setActiveSuggestionFor(query.id);
-                }
+                // Показываем список и на пустом поле — чтобы можно было
+                // просто выбрать NFT из списка, как в дропах/лайках.
+                setActiveAnchor(e.currentTarget);
+                setActiveSuggestionFor(query.id);
               }}
               onBlur={() => setTimeout(() => {
                 setActiveSuggestionFor(prev => {
