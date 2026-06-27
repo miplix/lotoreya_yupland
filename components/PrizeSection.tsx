@@ -44,6 +44,9 @@ export default function PrizeSection({
   const [allTitles, setAllTitles] = useState<TitleSuggestion[]>([]);
   const [titleAnchor, setTitleAnchor] = useState<HTMLInputElement | null>(null);
   const [titleFocused, setTitleFocused] = useState(false);
+  // Живой поиск по блокчейну для NFT, которых нет в кэше титулов
+  const [liveSuggestions, setLiveSuggestions] = useState<{ query: string; items: TitleSuggestion[] }>({ query: '', items: [] });
+  const [liveSearchingFor, setLiveSearchingFor] = useState<string | null>(null);
 
   // Token list (Turso reward_tokens)
   const [tokens, setTokens] = useState<RewardToken[]>([]);
@@ -78,6 +81,29 @@ export default function PrizeSection({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSigner]);
+
+  // Живой поиск NFT по блокчейну, когда в кэше титулов совпадений нет (та же
+  // логика, что в Билетах) — чтобы приз можно было выбрать из ВСЕХ NFT, а не
+  // только закэшированных.
+  useEffect(() => {
+    if (prize.kind !== 'nft') { setLiveSearchingFor(null); return; }
+    const t = prize.name.trim();
+    const cachedHas = !!t && allTitles.some(x => x.title.toLowerCase().includes(t.toLowerCase()));
+    if (!t || cachedHas) { setLiveSearchingFor(null); return; }
+    setLiveSearchingFor(t);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/lotoreya/api/search-nft?title=${encodeURIComponent(t)}`);
+        const d = await res.json();
+        const rows = (d.items ?? []) as Array<{ title?: string; media?: string }>;
+        const m = new Map<string, TitleSuggestion>();
+        for (const it of rows) { if (!it.title) continue; const c = m.get(it.title); if (c) c.count++; else m.set(it.title, { title: it.title, image: it.media ?? null, count: 1 }); }
+        setLiveSuggestions({ query: t, items: [...m.values()] });
+      } catch { /* silent */ }
+      finally { setLiveSearchingFor(prev => (prev === t ? null : prev)); }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [prize.kind, prize.name, allTitles]);
 
   const available = totalTickets - usedNumbers;
   const parsedCount = parseInt(countStr);
@@ -265,17 +291,30 @@ export default function PrizeSection({
       </div>
 
       {/* NFT autocomplete dropdown (portal-rendered, same as in NFTSection) */}
-      {prize.kind === 'nft' && titleFocused && (
-        <SuggestionDropdown
-          anchor={titleAnchor}
-          items={titleSuggestions}
-          emptyText={titleSuggestions.length ? undefined : allTitles.length === 0 ? 'Загрузка списка NFT…' : 'Ничего не найдено — очистите поле, чтобы листать список'}
-          onPick={s => {
-            onChange({ ...prize, name: s.title });
-            setTitleFocused(false);
-          }}
-        />
-      )}
+      {prize.kind === 'nft' && titleFocused && (() => {
+        const qTrim = prize.name.trim();
+        const live = (qTrim && liveSuggestions.query === qTrim) ? liveSuggestions.items : [];
+        const items = titleSuggestions.length ? titleSuggestions : live;
+        const searching = !!qTrim && liveSearchingFor === qTrim;
+        const emptyText = items.length
+          ? undefined
+          : allTitles.length === 0
+            ? 'Загрузка списка NFT…'
+            : searching
+              ? 'Ищу на блокчейне…'
+              : 'Ничего не найдено — очистите поле, чтобы листать список';
+        return (
+          <SuggestionDropdown
+            anchor={titleAnchor}
+            items={items}
+            emptyText={emptyText}
+            onPick={s => {
+              onChange({ ...prize, name: s.title });
+              setTitleFocused(false);
+            }}
+          />
+        );
+      })()}
 
       {/* Token picker dropdown — тот же компонент, что и для NFT */}
       {prize.kind === 'token' && tokenFocused && (
