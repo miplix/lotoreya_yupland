@@ -5,6 +5,7 @@ import { DrawState, RaffleResult, ServerState } from '@/lib/types';
 import { generateCSV, downloadCSV, makeFilename } from '@/lib/csv';
 import LotteryAnimation from '@/components/LotteryAnimation';
 import { getConnector } from '@/lib/near-connector';
+import { loadAdminKey, saveAdminKey, clearAdminKey } from '@/lib/admin-key';
 
 function shortAddr(addr: string) {
   return addr.length > 25 ? `${addr.slice(0, 8)}…${addr.slice(-8)}` : addr;
@@ -62,15 +63,16 @@ export default function WatchPage() {
   // цикла редиректов, если кука почему-то не ставится вообще.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    let saved: string | null = null;
-    try { saved = window.localStorage.getItem('lotoreya-admin-key'); } catch { /* ignore */ }
-    if (!saved) return;
-    setKeyInput(saved); // префилл на случай ручного входа
     try {
       if (window.sessionStorage.getItem('lotoreya-auto-login') === '1') return;
-      window.sessionStorage.setItem('lotoreya-auto-login', '1');
     } catch { /* ignore */ }
     (async () => {
+      // Ключ читаем из Telegram CloudStorage (переживает переоткрытие мини-аппа)
+      // или localStorage. Есть только у того, кто раз ввёл пароль = у админа.
+      const saved = await loadAdminKey();
+      if (!saved) return;
+      setKeyInput(saved); // префилл на случай ручного входа
+      try { window.sessionStorage.setItem('lotoreya-auto-login', '1'); } catch { /* ignore */ }
       try {
         const res = await fetch('/lotoreya/api/auth', {
           method: 'POST',
@@ -81,7 +83,7 @@ export default function WatchPage() {
           window.location.href = '/lotoreya';
         } else if (res.status === 401) {
           // Ключ устарел — забываем, чтобы не пытаться снова.
-          try { window.localStorage.removeItem('lotoreya-admin-key'); } catch { /* ignore */ }
+          await clearAdminKey();
         }
       } catch { /* оффлайн — оставляем как есть */ }
     })();
@@ -182,9 +184,9 @@ export default function WatchPage() {
         body: JSON.stringify({ key: keyInput }),
       });
       if (res.ok) {
-        // Запоминаем ключ на устройстве админа — чтобы дальше входить
-        // автоматически, без повторного ввода пароля (см. авто-вход ниже).
-        try { window.localStorage.setItem('lotoreya-admin-key', keyInput); } catch { /* ignore */ }
+        // Запоминаем ключ (CloudStorage + localStorage) — чтобы дальше входить
+        // автоматически, без повторного ввода пароля (см. авто-вход выше).
+        await saveAdminKey(keyInput);
         // basePath '/lotoreya' не применяется к window.location — префиксим вручную.
         window.location.href = '/lotoreya';
       } else {
