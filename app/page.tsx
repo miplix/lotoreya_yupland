@@ -368,23 +368,23 @@ export default function Home() {
                 <span className="text-gray-400">✕</span>
               </button>
             ) : (
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={connectWallet}
-                  disabled={walletBusy}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 rounded-lg text-xs transition-colors"
-                >
-                  {walletBusy ? 'Подключение…' : 'Подключить кошелёк'}
-                </button>
-                <button
-                  onClick={connectYupLink}
-                  title="Подписывать через YupLink-кошелёк"
-                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-medium rounded-lg text-xs transition-colors"
-                >
-                  YupLink
-                </button>
-              </div>
+              <button
+                onClick={connectWallet}
+                disabled={walletBusy}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 rounded-lg text-xs transition-colors"
+              >
+                {walletBusy ? 'Подключение…' : 'Подключить кошелёк'}
+              </button>
             )}
+            {/* YupLink — всегда видна: можно переключиться на подпись через наш
+                кош даже когда уже подключён другой кошелёк */}
+            <button
+              onClick={connectYupLink}
+              title="Подписывать выплаты через YupLink-кошелёк"
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-medium rounded-lg text-xs transition-colors"
+            >
+              YupLink
+            </button>
             <span className="text-xs text-gray-500 hidden sm:inline">Yupland · {new Date().getFullYear()}</span>
           </div>
         </header>
