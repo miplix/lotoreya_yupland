@@ -57,7 +57,6 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
   const [scanState, setScanState] = useState<ScanState | null>(null);
   const [scanning, setScanning] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [scanMsg, setScanMsg] = useState<string | null>(null);
   const inputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -89,8 +88,6 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
   const runScan = async () => {
     if (scanning) return;
     setScanning(true);
-    setScanMsg(null);
-    const before = scanState?.uniqueTitles ?? 0;
     try {
       for (let i = 0; i < 20; i++) {
         const res = await fetch('/lotoreya/api/nft-scan', {
@@ -98,10 +95,7 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pages: 5, resume: true }),
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err?.error ? `Скан: ${err.error}` : `Скан: HTTP ${res.status}`);
-        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         setScanState(prev => ({
           lastSkip: data.lastSkip,
@@ -114,12 +108,7 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
       const fresh = await fetch('/lotoreya/api/nft-scan').then(r => r.json());
       setScanState(fresh);
       await refreshTitleCache();
-      const total = Number(fresh?.uniqueTitles ?? 0);
-      const added = total - before;
-      setScanMsg(added > 0 ? `Готово: +${added} NFT (всего ${total})` : `Готово, список актуален (${total} NFT)`);
-    } catch (e) {
-      setScanMsg(e instanceof Error ? e.message : 'Ошибка скана');
-    }
+    } catch { /* silent */ }
     finally {
       setScanning(false);
     }
@@ -290,10 +279,6 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
           </button>
         </div>
       </div>
-
-      {scanMsg && (
-        <p className={`text-xs ${scanMsg.startsWith('Готово') ? 'text-green-400' : 'text-red-400'}`}>{scanMsg}</p>
-      )}
 
       {queries.map(query => (
         <div key={query.id} className="flex items-center gap-2">
