@@ -17,8 +17,11 @@ export default function WalletCallback() {
     const error = errorCode ? errorMessage || errorCode : "";
 
     const msg = { type: "yuplink-sign-result", transactionHashes, error };
+    // iframe-оверлей → шлём РОДИТЕЛЮ (window.parent); попап (фоллбэк) → opener.
+    const target =
+      window.parent && window.parent !== window ? window.parent : window.opener;
     try {
-      if (window.opener) window.opener.postMessage(msg, "*");
+      if (target) target.postMessage(msg, "*");
     } catch {
       /* ignore */
     }
@@ -26,12 +29,13 @@ export default function WalletCallback() {
       error
         ? `Отклонено: ${error}`
         : transactionHashes
-          ? "Подписано ✓ Можно закрыть окно."
-          : "Готово. Можно закрыть окно."
+          ? "Подписано ✓"
+          : "Готово."
     );
+    // Попап закрываем сами; iframe убирает родитель (overlay.remove), там close() — no-op.
     const t = setTimeout(() => {
       try {
-        window.close();
+        if (window.opener) window.close();
       } catch {
         /* ignore */
       }
