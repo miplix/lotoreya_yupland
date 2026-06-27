@@ -154,6 +154,7 @@ export default function PrizeSection({
     onChange({
       ...prize,
       count: parsedCount,
+      simultaneousCount: 50, // всегда по 50 (поле выбора убрано)
       tokenAmount: prize.kind === 'token' ? parsedAmount : undefined,
     });
     onRaffle();
@@ -202,23 +203,6 @@ export default function PrizeSection({
           >Токен</button>
         </div>
       )}
-
-      {/* Simultaneous count setting */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-400">Рандомно выбирать по:</span>
-        <input
-          type="number"
-          min={1}
-          max={50}
-          className="w-14 bg-gray-700/80 border border-gray-600 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:border-blue-500"
-          value={prize.simultaneousCount}
-          onChange={e => {
-            const v = Math.max(1, Math.min(50, parseInt(e.target.value) || 10));
-            onChange({ ...prize, simultaneousCount: v });
-          }}
-        />
-        <span className="text-xs text-gray-500">макс. 50</span>
-      </div>
 
       {/* Prize form */}
       <div className="flex flex-col gap-2 bg-gray-800/70 rounded-xl p-2">
