@@ -140,21 +140,32 @@ export default function Home() {
     setNotifyTg(v => { const next = !v; setNotifyTelegram(next); return next; });
   };
 
-  // NEAR wallet (singleton connector shared with /watch via lib/near-connector)
+  // NEAR wallet (singleton connector shared with /watch via lib/near-connector).
+  // YupLink-коннект near-connect НЕ знает — храним флаг в localStorage и
+  // восстанавливаем вручную (иначе на refresh подключение слетает).
   useEffect(() => {
     let cancelled = false;
+    const yuplinkActive = () => {
+      try { return !!localStorage.getItem('lotoreya-yuplink'); } catch { return false; }
+    };
+    // 1) Восстановить YupLink, если он был выбран.
+    if (yuplinkActive()) {
+      const yl = getYupLinkWallet();
+      setWallet(yl.accountId);
+      setWalletObj(yl.walletObj);
+    }
+    // 2) near-connect (HOT) — только если YupLink НЕ активен.
     (async () => {
       const c = await getConnector();
       if (!c || cancelled) return;
       const refresh = async () => {
+        if (yuplinkActive()) return; // YupLink активен — near-connect не трогаем
         try {
           const existing = await c.getConnectedWallet();
           const id = existing?.accounts?.[0]?.accountId;
           if (cancelled) return;
           if (id) {
             setWallet(id);
-            // `getConnectedWallet` returns { wallet, accounts }; the signing
-            // surface lives on `.wallet` (it implements signAndSendTransactions).
             setWalletObj((existing.wallet as unknown) as typeof walletObj extends infer T ? T : never);
           } else {
             setWallet(null);
@@ -163,12 +174,12 @@ export default function Home() {
         } catch { /* ignore */ }
       };
       const onSignIn = ({ accounts }: { accounts: Array<{ accountId: string }> }) => {
+        if (yuplinkActive()) return;
         const id = accounts[0]?.accountId;
         if (id) setWallet(id);
-        // Pick up the wallet object so we can call signAndSendTransactions.
         refresh();
       };
-      const onSignOut = () => { setWallet(null); setWalletObj(null); };
+      const onSignOut = () => { if (yuplinkActive()) return; setWallet(null); setWalletObj(null); };
       c.on('wallet:signIn', onSignIn);
       c.on('wallet:signOut', onSignOut);
       await refresh();
@@ -183,6 +194,7 @@ export default function Home() {
   const connectWallet = async () => {
     setWalletBusy(true);
     try {
+      try { localStorage.removeItem('lotoreya-yuplink'); } catch { /* ignore */ }
       const c = await getConnector();
       if (c) await c.connect();
     } catch { /* user cancelled / popup blocked */ }
@@ -191,13 +203,16 @@ export default function Home() {
 
   // Подключение через НАШ кош: аккаунт-оператор известен, подпись выплат идёт
   // через попап service.yupland.io/wallet/sign (оператор подтверждает в YupLink).
+  // Флаг в localStorage — чтобы коннект пережил refresh страницы.
   const connectYupLink = () => {
     const yl = getYupLinkWallet();
+    try { localStorage.setItem('lotoreya-yuplink', yl.accountId); } catch { /* ignore */ }
     setWallet(yl.accountId);
     setWalletObj(yl.walletObj);
   };
 
   const disconnectWallet = async () => {
+    try { localStorage.removeItem('lotoreya-yuplink'); } catch { /* ignore */ }
     try {
       const c = await getConnector();
       if (c) await c.disconnect();
