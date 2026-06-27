@@ -62,11 +62,17 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
 
   // Preload the full title list once — 1797 rows ≈ 150 KB; filter is local after that.
   const refreshTitleCache = async () => {
-    try {
-      const res = await fetch('/lotoreya/api/nft-titles?limit=2000');
-      const data = await res.json();
-      setAllTitles(data.items ?? []);
-    } catch { /* silent */ }
+    // Ретраи: если первый фетч упал/пустой (бывает в Telegram-webview),
+    // пробуем ещё, иначе список NFT остаётся пустым и дропдаун нечем наполнить.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const res = await fetch('/lotoreya/api/nft-titles?limit=2000');
+        const data = await res.json();
+        const items = data.items ?? [];
+        if (items.length) { setAllTitles(items); return; }
+      } catch { /* retry */ }
+      await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
+    }
   };
 
   useEffect(() => {
@@ -313,13 +319,25 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
         </div>
       ))}
 
-      {activeSuggestionFor && (
-        <SuggestionDropdown
-          anchor={activeAnchor}
-          items={suggestionsFor(queries.find(q => q.id === activeSuggestionFor)?.searchTitle ?? '')}
-          onPick={s => pickSuggestion(activeSuggestionFor, s)}
-        />
-      )}
+      {activeSuggestionFor && (() => {
+        const q = queries.find(qq => qq.id === activeSuggestionFor)?.searchTitle ?? '';
+        const items = suggestionsFor(q);
+        // Дропдаун показываем ВСЕГДА при фокусе: список, либо «загрузка», либо
+        // «ничего не найдено» — чтобы поле всегда реагировало, а не выглядело сломанным.
+        const emptyText = items.length
+          ? undefined
+          : allTitles.length === 0
+            ? 'Загрузка списка NFT…'
+            : 'Ничего не найдено — очистите поле, чтобы листать список';
+        return (
+          <SuggestionDropdown
+            anchor={activeAnchor}
+            items={items}
+            emptyText={emptyText}
+            onPick={s => pickSuggestion(activeSuggestionFor, s)}
+          />
+        );
+      })()}
 
       <button
         className="w-full py-1.5 border border-dashed border-gray-600 hover:border-gray-400 rounded-lg text-xs text-gray-500 hover:text-gray-300 transition-colors"

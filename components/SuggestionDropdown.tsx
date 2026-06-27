@@ -16,6 +16,9 @@ interface Props {
   onPick: (s: TitleSuggestion) => void;
   /** Скрыть «×{count}» — для списков без количества (напр. токены). */
   hideCount?: boolean;
+  /** Текст, когда items пуст (напр. «Ничего не найдено»). Если задан — дропдаун
+   *  всё равно показывается с этим сообщением, а не прячется (null). */
+  emptyText?: string;
 }
 
 interface Coords {
@@ -45,7 +48,7 @@ function computeCoords(anchor: HTMLElement): Coords {
   };
 }
 
-export function SuggestionDropdown({ anchor, items, onPick, hideCount }: Props) {
+export function SuggestionDropdown({ anchor, items, onPick, hideCount, emptyText }: Props) {
   const [coords, setCoords] = useState<Coords | null>(null);
   const [mounted, setMounted] = useState(false);
 
@@ -63,7 +66,7 @@ export function SuggestionDropdown({ anchor, items, onPick, hideCount }: Props) 
     };
   }, [anchor]);
 
-  if (!mounted || !anchor || !coords || items.length === 0) return null;
+  if (!mounted || !anchor || !coords || (items.length === 0 && !emptyText)) return null;
 
   return createPortal(
     <ul
@@ -83,7 +86,9 @@ export function SuggestionDropdown({ anchor, items, onPick, hideCount }: Props) 
       // suggestion open while the tap travels down to a child <li>.
       onMouseDown={e => e.preventDefault()}
     >
-      {items.map(s => {
+      {items.length === 0 ? (
+        <li className="px-3 py-2.5 text-gray-400 text-center select-none">{emptyText}</li>
+      ) : items.map(s => {
         const src = resolveImage(s.image);
         return (
           <li

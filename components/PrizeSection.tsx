@@ -56,8 +56,19 @@ export default function PrizeSection({
   const isSigner = walletAccount === COLLECTION_SIGNER;
 
   useEffect(() => {
-    fetch('/lotoreya/api/nft-titles?limit=2000').then(r => r.json()).then(d => setAllTitles(d.items ?? [])).catch(() => {});
-    fetch('/lotoreya/api/reward-tokens').then(r => r.json()).then(d => setTokens(d.items ?? [])).catch(() => {});
+    // Ретраи на случай падения первого фетча (Telegram-webview и т.п.)
+    const load = async <T,>(url: string, set: (v: T[]) => void) => {
+      for (let i = 0; i < 4; i++) {
+        try {
+          const d = await fetch(url).then(r => r.json());
+          const items = (d.items ?? []) as T[];
+          if (items.length) { set(items); return; }
+        } catch { /* retry */ }
+        await new Promise(r => setTimeout(r, 700 * (i + 1)));
+      }
+    };
+    load<TitleSuggestion>('/lotoreya/api/nft-titles?limit=2000', setAllTitles);
+    load<RewardToken>('/lotoreya/api/reward-tokens', setTokens);
   }, []);
 
   // Force NFT mode (without amount) when token features are not allowed
@@ -258,6 +269,7 @@ export default function PrizeSection({
         <SuggestionDropdown
           anchor={titleAnchor}
           items={titleSuggestions}
+          emptyText={titleSuggestions.length ? undefined : allTitles.length === 0 ? 'Загрузка списка NFT…' : 'Ничего не найдено — очистите поле, чтобы листать список'}
           onPick={s => {
             onChange({ ...prize, name: s.title });
             setTitleFocused(false);
@@ -271,6 +283,7 @@ export default function PrizeSection({
           anchor={tokenAnchor}
           items={tokenSuggestions}
           hideCount
+          emptyText={tokenSuggestions.length ? undefined : tokens.length === 0 ? 'Загрузка токенов…' : 'Токен не найден'}
           onPick={s => {
             onChange({ ...prize, name: s.title });
             setTokenFocused(false);
