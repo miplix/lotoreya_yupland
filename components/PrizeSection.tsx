@@ -47,6 +47,8 @@ export default function PrizeSection({
 
   // Token list (Turso reward_tokens)
   const [tokens, setTokens] = useState<RewardToken[]>([]);
+  const [tokenAnchor, setTokenAnchor] = useState<HTMLInputElement | null>(null);
+  const [tokenFocused, setTokenFocused] = useState(false);
 
   // Per-winner amount input (string, validated on raffle)
   const [amountStr, setAmountStr] = useState(prize.tokenAmount ? String(prize.tokenAmount) : '');
@@ -73,21 +75,32 @@ export default function PrizeSection({
 
   const parsedAmount = parseFloat(amountStr);
   const amountInvalid = prize.kind === 'token' && (!amountStr.trim() || isNaN(parsedAmount) || parsedAmount <= 0);
+  // Символ токена должен быть из списка reward_tokens (нужен точный symbol для выплаты)
+  const tokenSymbolInvalid = prize.kind === 'token' && !tokens.some(t => t.symbol === prize.name);
 
   // Filtered NFT title suggestions (instant, client-side)
   const titleSuggestions = useMemo(() => {
     if (prize.kind !== 'nft') return [] as TitleSuggestion[];
     const q = prize.name.trim().toLowerCase();
-    if (!q) return [];
+    // Пустое поле — топ-список, чтобы можно было просто полистать и выбрать (как в Билетах/дропах)
+    if (!q) return allTitles.slice(0, 50);
     const out: TitleSuggestion[] = [];
     for (const t of allTitles) {
       if (t.title.toLowerCase().includes(q)) {
         out.push(t);
-        if (out.length >= 500) break;
+        if (out.length >= 50) break;
       }
     }
     return out;
   }, [prize.kind, prize.name, allTitles]);
+
+  // Токены как пикер-дропдаун (тот же компонент, что и NFT), вместо native <select>
+  const tokenSuggestions = useMemo<TitleSuggestion[]>(() => {
+    if (prize.kind !== 'token') return [];
+    const q = prize.name.trim().toLowerCase();
+    const base: TitleSuggestion[] = tokens.map(t => ({ title: t.symbol, image: null, count: 0 }));
+    return q ? base.filter(s => s.title.toLowerCase().includes(q)) : base;
+  }, [prize.kind, prize.name, tokens]);
 
   const handleRaffle = () => {
     if (countInvalid) {
@@ -96,7 +109,7 @@ export default function PrizeSection({
       countRef.current?.focus();
       return;
     }
-    if (amountInvalid) {
+    if (amountInvalid || tokenSymbolInvalid) {
       setShake(true);
       setTimeout(() => setShake(false), 450);
       return;
@@ -187,16 +200,18 @@ export default function PrizeSection({
           />
         ) : (
           <div className="flex gap-2">
-            <select
+            <input
+              ref={el => setTokenAnchor(el)}
               className="flex-1 bg-gray-700/80 border border-gray-600 rounded-lg px-3 py-2.5 text-base sm:text-sm focus:outline-none focus:border-blue-500"
+              placeholder="Токен — выберите из списка"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
               value={prize.name}
               onChange={e => onChange({ ...prize, name: e.target.value })}
-            >
-              <option value="">— токен —</option>
-              {tokens.map(t => (
-                <option key={t.symbol} value={t.symbol}>{t.symbol}</option>
-              ))}
-            </select>
+              onFocus={() => setTokenFocused(true)}
+              onBlur={() => setTimeout(() => setTokenFocused(false), 150)}
+            />
             <input
               className="w-28 bg-gray-700/80 border border-gray-600 rounded-lg px-2 py-2.5 text-sm text-center focus:outline-none focus:border-blue-500"
               type="number"
@@ -248,6 +263,23 @@ export default function PrizeSection({
             setTitleFocused(false);
           }}
         />
+      )}
+
+      {/* Token picker dropdown — тот же компонент, что и для NFT */}
+      {prize.kind === 'token' && tokenFocused && (
+        <SuggestionDropdown
+          anchor={tokenAnchor}
+          items={tokenSuggestions}
+          hideCount
+          onPick={s => {
+            onChange({ ...prize, name: s.title });
+            setTokenFocused(false);
+          }}
+        />
+      )}
+
+      {prize.kind === 'token' && prize.name.trim() !== '' && tokenSymbolInvalid && (
+        <span className="text-yellow-400 text-xs">Выберите токен из списка</span>
       )}
 
       {over && (

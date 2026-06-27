@@ -14,6 +14,8 @@ interface Props {
   anchor: HTMLElement | null;
   items: TitleSuggestion[];
   onPick: (s: TitleSuggestion) => void;
+  /** Скрыть «×{count}» — для списков без количества (напр. токены). */
+  hideCount?: boolean;
 }
 
 interface Coords {
@@ -43,7 +45,7 @@ function computeCoords(anchor: HTMLElement): Coords {
   };
 }
 
-export function SuggestionDropdown({ anchor, items, onPick }: Props) {
+export function SuggestionDropdown({ anchor, items, onPick, hideCount }: Props) {
   const [coords, setCoords] = useState<Coords | null>(null);
   const [mounted, setMounted] = useState(false);
 
@@ -104,7 +106,9 @@ export function SuggestionDropdown({ anchor, items, onPick }: Props) {
               <span className="w-9 h-9 rounded bg-gray-900 shrink-0" />
             )}
             <span className="flex-1 min-w-0 truncate text-gray-100">{s.title}</span>
-            <span className="shrink-0 text-xs text-gray-400">×{s.count}</span>
+            {!hideCount && (
+              <span className="shrink-0 text-xs text-gray-400">×{s.count}</span>
+            )}
           </li>
         );
       })}
