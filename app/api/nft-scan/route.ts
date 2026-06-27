@@ -46,6 +46,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+ try {
   const body = await request.json().catch(() => ({}));
   const pages = Math.max(1, Math.min(10, Number(body?.pages ?? 5)));
   const resume = body?.resume !== false;
@@ -123,4 +124,10 @@ export async function POST(request: NextRequest) {
     totalSeen,
     endOfCollection,
   });
+ } catch (e) {
+  return NextResponse.json(
+    { error: e instanceof Error ? e.message : String(e), where: 'scan', stack: e instanceof Error ? (e.stack ?? '').slice(0, 700) : undefined },
+    { status: 500 },
+  );
+ }
 }
