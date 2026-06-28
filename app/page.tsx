@@ -359,7 +359,19 @@ export default function Home() {
     <main className="min-h-screen p-3 md:p-8">
       <div className="max-w-5xl mx-auto space-y-3 md:space-y-4">
         <header className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-lg md:text-2xl font-bold tracking-tight">NFT Lottery Raffle</h1>
+          <div className="flex items-center gap-2 md:gap-3">
+            {/* Назад в YupLink. Лотерея проксируется на service.yupland.io/lotoreya,
+                YupLink (golden-drop) — на корне service.yupland.io. raw <a href="/">
+                НЕ префиксится Next basePath'ом → ведёт на YupLink, а не на лотерею. */}
+            <a
+              href="/"
+              title="Назад в YupLink"
+              className="px-2.5 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs transition-colors flex items-center gap-1 shrink-0"
+            >
+              <span aria-hidden>←</span> YupLink
+            </a>
+            <h1 className="text-lg md:text-2xl font-bold tracking-tight">NFT Lottery Raffle</h1>
+          </div>
           <div className="flex items-center gap-3">
             <a
               href="/watch"
