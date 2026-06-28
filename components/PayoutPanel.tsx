@@ -186,6 +186,13 @@ export default function PayoutPanel({ result, walletAccount, walletObj, csvDeliv
     } catch { /* reactions are best-effort */ }
   };
 
+  // После успешной выдачи коротко показываем «✓ Выдано» и закрываем окно.
+  useEffect(() => {
+    if (stage !== 'done') return;
+    const t = setTimeout(() => onClose(), 1500);
+    return () => clearTimeout(t);
+  }, [stage, onClose]);
+
   const doPayout = async () => {
     if (!walletObj) { setError('Кошелёк не подключён'); setStage('error'); return; }
     setError(null);
@@ -235,8 +242,12 @@ export default function PayoutPanel({ result, walletAccount, walletObj, csvDeliv
             transferPairs.push([tokenId, item.wallet]);
           }
         }
-        if (transferPairs.length > 0) {
-          actions.push(buildNftBatchTransferAction(transferPairs));
+        // Чанкуем пары: один nft_batch_transfer на ≤8 пар, чтобы рассылка многим
+        // победителям не упёрлась в газовый потолок одного вызова. splitTxs ниже
+        // разложит экшены по транзакциям (≤280 TGas каждая).
+        const PAIRS_PER_BATCH = 8;
+        for (let i = 0; i < transferPairs.length; i += PAIRS_PER_BATCH) {
+          actions.push(buildNftBatchTransferAction(transferPairs.slice(i, i + PAIRS_PER_BATCH)));
         }
         if (actions.length === 0) {
           setStage('done');
@@ -332,7 +343,7 @@ export default function PayoutPanel({ result, walletAccount, walletObj, csvDeliv
         <div className="px-5 py-3 border-t border-gray-700 flex gap-2">
           <button
             onClick={doPayout}
-            disabled={stage === 'planning' || stage === 'notifying' || stage === 'signing' || stage === 'reacting' || !isCollectionSigner || !walletObj}
+            disabled={stage === 'planning' || stage === 'notifying' || stage === 'signing' || stage === 'reacting' || stage === 'done' || !isCollectionSigner || !walletObj}
             className="flex-1 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 rounded-lg text-sm font-medium transition-colors"
           >
             {stage === 'planning' && 'Готовлю план...'}
