@@ -8,6 +8,7 @@ import ResultModal from '@/components/ResultModal';
 import LotteryAnimation from '@/components/LotteryAnimation';
 import PayoutPanel from '@/components/PayoutPanel';
 import { SIGNER_WALLET } from '@/lib/payout';
+import { uid } from '@/lib/uid';
 import { AppState, NFTQuery, RaffleResult, Winner, DrawState } from '@/lib/types';
 import { loadState, saveState, resetState, exportState, importState } from '@/lib/storage';
 import { runLottery, getTotalTickets } from '@/lib/lottery';
@@ -284,7 +285,7 @@ export default function Home() {
     if (available <= 0) { alert('Все билеты разыграны. Нажмите «Сбросить всё».'); return; }
 
     const prizeObj = {
-      id: crypto.randomUUID(),
+      id: uid(),
       name: prize.name.trim(),
       count: prize.count,
       kind: prize.kind,

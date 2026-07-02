@@ -5,6 +5,7 @@ import { NFTQuery, NFTItem } from '@/lib/types';
 import { extractTicketCount } from '@/lib/nft-parser';
 import { getWalletRanges } from '@/lib/lottery';
 import { SuggestionDropdown, type TitleSuggestion } from './SuggestionDropdown';
+import { uid } from '@/lib/uid';
 
 interface Props {
   queries: NFTQuery[];
@@ -115,7 +116,7 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
   };
 
   const addQuery = () =>
-    onChange([...queries, { id: crypto.randomUUID(), searchTitle: '', nfts: [] }]);
+    onChange([...queries, { id: uid(), searchTitle: '', nfts: [] }]);
 
   const removeQuery = (id: string) => {
     const t = timers.current.get(id);
@@ -387,9 +388,18 @@ export default function NFTSection({ queries, onChange, onSearchDone, notifyTele
                 className="px-2.5 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
                 onClick={() => {
                   const text = ranges.map(r => `${r.wallet},${r.tickets}`).join('\n');
-                  navigator.clipboard.writeText(text)
-                    .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); })
-                    .catch(() => {});
+                  const ok = () => { setCopied(true); setTimeout(() => setCopied(false), 2000); };
+                  // navigator.clipboard есть не во всех webview (телефон) → фоллбэк.
+                  if (navigator.clipboard?.writeText) {
+                    navigator.clipboard.writeText(text).then(ok).catch(() => {});
+                  } else {
+                    try {
+                      const ta = document.createElement('textarea');
+                      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+                      document.body.appendChild(ta); ta.focus(); ta.select();
+                      document.execCommand('copy'); document.body.removeChild(ta); ok();
+                    } catch { /* ignore */ }
+                  }
                 }}
                 style={{ minWidth: '7rem' }}
               >{copied ? '✓ Скопировано' : 'Копировать'}</button>

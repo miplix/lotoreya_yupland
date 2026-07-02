@@ -1,4 +1,5 @@
 import { NFTQuery, Prize, Winner, RaffleResult } from './types';
+import { uid } from './uid';
 
 export interface WalletRange {
   wallet: string;
@@ -112,7 +113,7 @@ export function runLottery(
 
   return {
     result: {
-      id: crypto.randomUUID(),
+      id: uid(),
       timestamp: Date.now(),
       prizes: [prize],
       winners,
