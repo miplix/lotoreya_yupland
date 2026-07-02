@@ -272,6 +272,15 @@ export default function PrizeSection({
             {sending ? 'Отправка...' : 'Провести розыгрыш'}
           </button>
         </div>
+
+        {/* Почему кнопка неактивна — иначе оператор думает «не работает». */}
+        {available <= 0 && !sending && (
+          <p className="mt-1 text-xs text-yellow-400">
+            {totalTickets <= 0
+              ? '⚠️ Сначала нажми «Найти NFT» — участники ещё не загружены.'
+              : '⚠️ Все билеты уже разыграны — нажми «Сбросить всё», чтобы начать заново.'}
+          </p>
+        )}
       </div>
 
       {/* NFT autocomplete dropdown (portal-rendered, same as in NFTSection) */}
