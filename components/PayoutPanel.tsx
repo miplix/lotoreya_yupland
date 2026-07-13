@@ -130,7 +130,7 @@ export default function PayoutPanel({ result, walletAccount, walletObj, csvDeliv
           // No `contract` parameter — let Sendler tell us which collection
           // this title actually lives in (so we detect foreign collections).
           const r = await fetch(
-            `/lotoreya/api/sendler-holdings?owner=${encodeURIComponent(SIGNER_WALLET)}&title=${encodeURIComponent(prize.name)}`,
+            `/lotoreya/api/sendler-holdings?owner=${encodeURIComponent(walletAccount)}&title=${encodeURIComponent(prize.name)}`,
           );
           if (!r.ok) throw new Error(`Sendler ${r.status}`);
           const data = (await r.json()) as Holdings;
@@ -141,7 +141,9 @@ export default function PayoutPanel({ result, walletAccount, walletObj, csvDeliv
             winners: aggregated,
             signerHoldings: data.tokenIds,
             contract: data.contract,
-            mintable: data.mintable,
+            // Минтить может только владелец коллекции (darai_collection). Чужой
+            // (HOT) кошелёк — только transfer из своих холдингов.
+            mintable: data.mintable && isCollectionSigner,
           }));
         }
         if (!cancelled) setStage('idle');
@@ -152,7 +154,7 @@ export default function PayoutPanel({ result, walletAccount, walletObj, csvDeliv
       }
     })();
     return () => { cancelled = true; };
-  }, [aggregated, prize, isToken]);
+  }, [aggregated, prize, isToken, walletAccount, isCollectionSigner]);
 
   const sendAdminCsv = async (): Promise<DeliveryRecord[]> => {
     const csv = buildCsv(prize, aggregated);
@@ -306,20 +308,19 @@ export default function PayoutPanel({ result, walletAccount, walletObj, csvDeliv
             )}
           </p>
           {!isCollectionSigner && (
-            <p className="text-yellow-400 text-xs">
-              Подключён не {SIGNER_WALLET}. Выдача недоступна.
+            <p className="text-cyan-400 text-xs">
+              Раздача с подключённого кошелька ({walletAccount}) — отправим NFT, что есть на нём.
             </p>
           )}
-          {!isToken && nftPlan && !nftPlan.mintable && !externalShortage && (
+          {!isToken && nftPlan && !nftPlan.mintable && !externalShortage && isCollectionSigner && (
             <p className="text-yellow-400 text-xs">
               Чужая коллекция ({nftPlan.contract || '?'}). Минт невозможен — отправим то, что есть на кошельке.
             </p>
           )}
           {externalShortage && (
             <p className="text-red-400 text-xs">
-              На {SIGNER_WALLET} только {nftPlan?.totalHoldings ?? 0} NFT, нужно {nftPlan?.totalNeeded ?? 0}.
-              Минт чужой коллекции ({nftPlan?.contract}) невозможен. On-chain отправка пропускается — будет
-              только CSV админам без 👍.
+              На {walletAccount} только {nftPlan?.totalHoldings ?? 0} NFT, нужно {nftPlan?.totalNeeded ?? 0}.
+              Минт невозможен. On-chain отправка пропускается — будет только CSV админам без 👍.
             </p>
           )}
           {error && <p className="text-red-400 text-xs break-words">{error}</p>}
@@ -343,7 +344,7 @@ export default function PayoutPanel({ result, walletAccount, walletObj, csvDeliv
         <div className="px-5 py-3 border-t border-gray-700 flex gap-2">
           <button
             onClick={doPayout}
-            disabled={stage === 'planning' || stage === 'notifying' || stage === 'signing' || stage === 'reacting' || stage === 'done' || !isCollectionSigner || !walletObj}
+            disabled={stage === 'planning' || stage === 'notifying' || stage === 'signing' || stage === 'reacting' || stage === 'done' || !walletObj}
             className="flex-1 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 rounded-lg text-sm font-medium transition-colors"
           >
             {stage === 'planning' && 'Готовлю план...'}

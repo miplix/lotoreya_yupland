@@ -233,23 +233,25 @@ export default function WatchPage() {
               {musicOn ? '🔊' : '🔈'}
             </button>
             <span className="text-xs text-gray-500 hidden sm:inline">Yupland · {new Date().getFullYear()}</span>
-            {wallet ? (
+            {wallet && (
               <button
                 onClick={disconnectWallet}
                 title="Отключить кошелёк"
-                className="px-3 py-1.5 bg-gray-700 hover:bg-red-800 rounded-lg text-xs transition-colors flex items-center gap-1.5 max-w-[10rem]"
+                className="px-3 py-1.5 bg-gray-700 hover:bg-red-800 rounded-lg text-xs transition-colors flex items-center gap-1.5 max-w-[8rem]"
               >
                 <span className="truncate">{wallet}</span>
                 <span className="text-gray-400">✕</span>
               </button>
-            ) : (
-              <button
-                className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs transition-colors"
-                onClick={() => { setShowLogin(true); setKeyInput(''); setLoginError(''); }}
-              >
-                Войти
-              </button>
             )}
+            {/* «Войти» показываем ВСЕГДА (вход оператора не зависит от того,
+                подключён ли near-connect кош — иначе при авто-коннекте кнопка
+                пропадала и оставался «чисто кош»). */}
+            <button
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-lg text-xs transition-colors"
+              onClick={() => { setShowLogin(true); setKeyInput(''); setLoginError(''); }}
+            >
+              Войти
+            </button>
           </div>
         </header>
 

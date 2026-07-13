@@ -7,7 +7,6 @@ import HistorySection, { doSend } from '@/components/HistorySection';
 import ResultModal from '@/components/ResultModal';
 import LotteryAnimation from '@/components/LotteryAnimation';
 import PayoutPanel from '@/components/PayoutPanel';
-import { SIGNER_WALLET } from '@/lib/payout';
 import { uid } from '@/lib/uid';
 import { AppState, NFTQuery, RaffleResult, Winner, DrawState } from '@/lib/types';
 import { loadState, saveState, resetState, exportState, importState } from '@/lib/storage';
@@ -479,14 +478,14 @@ export default function Home() {
           text={resultText}
           onClose={() => setResultText(null)}
           onPayout={
-            wallet === SIGNER_WALLET && payoutResult
+            !!wallet && payoutResult
               ? () => { setResultText(null); /* keep payoutResult to open PayoutPanel */ }
               : undefined
           }
         />
       )}
 
-      {payoutResult && !resultText && wallet === SIGNER_WALLET && (
+      {payoutResult && !resultText && !!wallet && (
         <PayoutPanel
           result={payoutResult}
           walletAccount={wallet}
