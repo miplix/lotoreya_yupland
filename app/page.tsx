@@ -14,7 +14,6 @@ import { runLottery, getTotalTickets } from '@/lib/lottery';
 import { formatRaffleText } from '@/lib/csv';
 import { getNotifyTelegram, setNotifyTelegram } from '@/lib/notifications';
 import { getConnector } from '@/lib/near-connector';
-import { getYupLinkWallet } from '@/lib/yuplink-wallet';
 import { pushLotteryResult, clearLotteryState, pushBgImage } from '@/app/actions/lottery-actions';
 
 interface AnimData {
@@ -140,26 +139,17 @@ export default function Home() {
     setNotifyTg(v => { const next = !v; setNotifyTelegram(next); return next; });
   };
 
-  // NEAR wallet (singleton connector shared with /watch via lib/near-connector).
-  // YupLink-коннект near-connect НЕ знает — храним флаг в localStorage и
-  // восстанавливаем вручную (иначе на refresh подключение слетает).
+  // NEAR wallet — ТОЛЬКО внешний кош (near-connect/HOT). Подпись через
+  // встроенный YupLink-кошелёк (/wallet/sign) убрана: подписываем ровно тем
+  // кошельком, что подключён снаружи (HOT и т.п.).
   useEffect(() => {
     let cancelled = false;
-    const yuplinkActive = () => {
-      try { return !!localStorage.getItem('lotoreya-yuplink'); } catch { return false; }
-    };
-    // 1) Восстановить YupLink, если он был выбран.
-    if (yuplinkActive()) {
-      const yl = getYupLinkWallet();
-      setWallet(yl.accountId);
-      setWalletObj(yl.walletObj);
-    }
-    // 2) near-connect (HOT) — только если YupLink НЕ активен.
+    // Чистим возможный старый флаг YupLink, чтобы он не перехватывал подпись.
+    try { localStorage.removeItem('lotoreya-yuplink'); } catch { /* ignore */ }
     (async () => {
       const c = await getConnector();
       if (!c || cancelled) return;
       const refresh = async () => {
-        if (yuplinkActive()) return; // YupLink активен — near-connect не трогаем
         try {
           const existing = await c.getConnectedWallet();
           const id = existing?.accounts?.[0]?.accountId;
@@ -174,12 +164,11 @@ export default function Home() {
         } catch { /* ignore */ }
       };
       const onSignIn = ({ accounts }: { accounts: Array<{ accountId: string }> }) => {
-        if (yuplinkActive()) return;
         const id = accounts[0]?.accountId;
         if (id) setWallet(id);
         refresh();
       };
-      const onSignOut = () => { if (yuplinkActive()) return; setWallet(null); setWalletObj(null); };
+      const onSignOut = () => { setWallet(null); setWalletObj(null); };
       c.on('wallet:signIn', onSignIn);
       c.on('wallet:signOut', onSignOut);
       await refresh();
@@ -199,16 +188,6 @@ export default function Home() {
       if (c) await c.connect();
     } catch { /* user cancelled / popup blocked */ }
     finally { setWalletBusy(false); }
-  };
-
-  // Подключение через НАШ кош: аккаунт-оператор известен, подпись выплат идёт
-  // через попап service.yupland.io/wallet/sign (оператор подтверждает в YupLink).
-  // Флаг в localStorage — чтобы коннект пережил refresh страницы.
-  const connectYupLink = () => {
-    const yl = getYupLinkWallet();
-    try { localStorage.setItem('lotoreya-yuplink', yl.accountId); } catch { /* ignore */ }
-    setWallet(yl.accountId);
-    setWalletObj(yl.walletObj);
   };
 
   const disconnectWallet = async () => {
@@ -403,15 +382,6 @@ export default function Home() {
                 {walletBusy ? 'Подключение…' : 'Подключить кошелёк'}
               </button>
             )}
-            {/* YupLink — всегда видна: можно переключиться на подпись через наш
-                кош даже когда уже подключён другой кошелёк */}
-            <button
-              onClick={connectYupLink}
-              title="Подписывать выплаты через YupLink-кошелёк"
-              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-medium rounded-lg text-xs transition-colors"
-            >
-              YupLink
-            </button>
             <span className="text-xs text-gray-500 hidden sm:inline">Yupland · {new Date().getFullYear()}</span>
           </div>
         </header>
